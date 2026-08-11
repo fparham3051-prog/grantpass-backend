@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Return xmlns="http://www.irs.gov/efile">
+  <ReturnHeader>
+    <Filer>
+      <EIN>133556677</EIN>
+      <BusinessName>
+        <BusinessNameLine1Txt>Bright Path Youth Alliance</BusinessNameLine1Txt>
+      </BusinessName>
+    </Filer>
+    <TaxYr>2024</TaxYr>
+  </ReturnHeader>
+  <ReturnData>
+    <IRS990>
+      <CYTotalRevenueAmt>2415000</CYTotalRevenueAmt>
+      <CYTotalExpensesAmt>2260000</CYTotalExpensesAmt>
+      <CYContributionsGrantsAmt>1680000</CYContributionsGrantsAmt>
+      <CYProgramServiceRevenueAmt>410000</CYProgramServiceRevenueAmt>
+      <TotalAssetsEOYAmt>1980000</TotalAssetsEOYAmt>
+      <NetAssetsOrFundBalancesEOYAmt>1120000</NetAssetsOrFundBalancesEOYAmt>
+    </IRS990>
+  </ReturnData>
+</Return>

@@ -1,0 +1,34 @@
+{
+  "organization": {
+    "ein": 133556677,
+    "name": "BRIGHT PATH YOUTH ALLIANCE",
+    "city": "Alexandria",
+    "state": "VA",
+    "ntee_code": "B21"
+  },
+  "filings_with_data": [
+    {
+      "tax_prd": 202412,
+      "tax_prd_yr": 2024,
+      "formtype": 0,
+      "totrevenue": 2415000,
+      "totfuncexpns": 2260000,
+      "totassetsend": 1980000,
+      "totliabend": 860000,
+      "totcntrbgfts": 1680000,
+      "totprgmrevnue": 410000
+    },
+    {
+      "tax_prd": 202312,
+      "tax_prd_yr": 2023,
+      "formtype": 0,
+      "totrevenue": 2180000,
+      "totfuncexpns": 2050000,
+      "totassetsend": 1720000,
+      "totliabend": 790000,
+      "totcntrbgfts": 1510000,
+      "totprgmrevnue": 380000
+    }
+  ],
+  "filings_without_data": []
+}

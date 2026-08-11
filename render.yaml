@@ -1,0 +1,20 @@
+# Render Blueprint - https://render.com/docs/blueprint-spec
+# Deploys this backend as a Docker web service with a persistent disk for
+# the SQLite file (Render's filesystem is otherwise ephemeral on redeploy).
+services:
+  - type: web
+    name: grantpass-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: GRANTPASS_SECRET
+        generateValue: true
+      - key: GRANTPASS_DB
+        value: /app/data/grantpass.db
+      - key: PORT
+        value: 8420
+    disk:
+      name: grantpass-data
+      mountPath: /app/data
+      sizeGB: 1

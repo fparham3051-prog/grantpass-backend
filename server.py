@@ -1,0 +1,471 @@
+"""
+GrantPass backend — real HTTP API, no framework dependency (pure stdlib
+http.server), so it runs anywhere Python 3 runs with zero installs.
+
+Run:
+    python3 server.py
+    (listens on http://0.0.0.0:8420 by default; override with PORT env var)
+
+See README.md for the full API reference and curl examples.
+"""
+import json
+import os
+import re
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
+
+import auth
+import db
+import parsing
+import scoring
+
+db.init_db()
+
+
+def json_response(handler, status, payload):
+    body = json.dumps(payload, default=str).encode()
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def get_auth_user(handler):
+    header = handler.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return None
+    return auth.verify_token(header[7:])
+
+
+def score_org(conn, org_id: int) -> dict:
+    """Shared scoring logic used by /score and /funders/{id}/rank."""
+    org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
+    if not org:
+        return None
+    snapshot = conn.execute(
+        "SELECT * FROM financial_snapshots WHERE org_id=? ORDER BY ingested_at DESC LIMIT 1", (org_id,)
+    ).fetchone()
+    manual_row = conn.execute(
+        "SELECT dimensions_json FROM manual_dimensions WHERE org_id=?", (org_id,)
+    ).fetchone()
+
+    manual_dims = {}
+    if manual_row:
+        try:
+            manual_dims = json.loads(manual_row["dimensions_json"])
+        except Exception:
+            manual_dims = {}
+
+    fin_score, fin_note = scoring.score_financial_health(dict(snapshot) if snapshot else None)
+
+    dims = []
+    dim_scores = {"financial": fin_score}
+    for d in scoring.RUBRIC:
+        if d["key"] == "financial":
+            sc, note = fin_score, fin_note
+        elif d["key"] in manual_dims:
+            sc, note = manual_dims[d["key"]], "Manually entered / externally scored."
+        else:
+            sc, note = 50, "No data yet for this dimension — neutral default."
+        dim_scores[d["key"]] = sc
+        dims.append({"name": d["name"], "weight": d["weight"], "score": sc, "level": scoring.level_for(sc), "note": note})
+
+    overall = scoring.compute_overall(dim_scores)
+    return {
+        "orgId": org_id,
+        "orgName": org["name"],
+        "overall": overall,
+        "status": scoring.status_for(overall),
+        "dimensions": dims,
+        "dimensionScores": dim_scores,
+        "financialSourced": bool(snapshot),
+    }
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        pass  # quiet; comment out to debug
+
+    def _read_body(self) -> bytes:
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        return self.rfile.read(length) if length else b""
+
+    def _read_json(self) -> dict:
+        raw = self._read_body()
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except Exception:
+            return {}
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        self.end_headers()
+
+    def do_GET(self):
+        self._route("GET")
+
+    def do_POST(self):
+        self._route("POST")
+
+    def _route(self, method):
+        path = urlparse(self.path).path
+        try:
+            if path == "/health":
+                return json_response(self, 200, {"ok": True})
+            if path == "/auth/register" and method == "POST":
+                return self._register()
+            if path == "/auth/login" and method == "POST":
+                return self._login()
+            if path == "/orgs" and method == "GET":
+                return self._list_orgs()
+            if path == "/orgs" and method == "POST":
+                return self._create_org()
+
+            m = re.match(r"^/orgs/(\d+)$", path)
+            if m and method == "GET":
+                return self._get_org(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/ingest-990$", path)
+            if m and method == "POST":
+                return self._ingest_990(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/ingest-financial-data$", path)
+            if m and method == "POST":
+                return self._ingest_financial_data(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/financial-snapshot$", path)
+            if m and method == "GET":
+                return self._get_financial_snapshot(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/dimensions$", path)
+            if m and method == "POST":
+                return self._set_dimensions(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/score$", path)
+            if m and method == "GET":
+                return self._get_score(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/reports$", path)
+            if m and method == "POST":
+                return self._add_report(int(m.group(1)))
+            if m and method == "GET":
+                return self._list_reports(int(m.group(1)))
+
+            if path == "/funders" and method == "GET":
+                return self._list_funders()
+            if path == "/funders" and method == "POST":
+                return self._create_funder()
+
+            m = re.match(r"^/funders/(\d+)/rank$", path)
+            if m and method == "GET":
+                return self._rank_for_funder(int(m.group(1)))
+
+            return json_response(self, 404, {"error": "not found"})
+        except Exception as e:
+            return json_response(self, 500, {"error": str(e)})
+
+    # ---------- auth ----------
+    def _register(self):
+        data = self._read_json()
+        email = (data.get("email") or "").strip().lower()
+        password = data.get("password") or ""
+        if not email or len(password) < 8:
+            return json_response(self, 400, {"error": "email and password (8+ chars) required"})
+        conn = db.get_conn()
+        if conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
+            conn.close()
+            return json_response(self, 409, {"error": "email already registered"})
+        salt, pwd_hash = auth.hash_password(password)
+        cur = conn.execute(
+            "INSERT INTO users (email, salt, password_hash, created_at) VALUES (?,?,?,?)",
+            (email, salt, pwd_hash, db.now()),
+        )
+        conn.commit()
+        user_id = cur.lastrowid
+        conn.close()
+        return json_response(self, 201, {"token": auth.make_token(user_id), "userId": user_id})
+
+    def _login(self):
+        data = self._read_json()
+        email = (data.get("email") or "").strip().lower()
+        password = data.get("password") or ""
+        conn = db.get_conn()
+        row = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        conn.close()
+        if not row or not auth.verify_password(password, row["salt"], row["password_hash"]):
+            return json_response(self, 401, {"error": "invalid credentials"})
+        return json_response(self, 200, {"token": auth.make_token(row["id"]), "userId": row["id"]})
+
+    # ---------- orgs ----------
+    def _create_org(self):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        if not data.get("name"):
+            return json_response(self, 400, {"error": "name required"})
+        conn = db.get_conn()
+        cur = conn.execute(
+            "INSERT INTO organizations (user_id, name, ein, description, created_at) VALUES (?,?,?,?,?)",
+            (user_id, data["name"], data.get("ein"), data.get("description"), db.now()),
+        )
+        conn.commit()
+        org_id = cur.lastrowid
+        conn.close()
+        return json_response(self, 201, {"id": org_id, "name": data["name"]})
+
+    def _list_orgs(self):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        rows = conn.execute(
+            "SELECT id, name, ein, description, created_at FROM organizations WHERE user_id=?", (user_id,)
+        ).fetchall()
+        conn.close()
+        return json_response(self, 200, {"organizations": [dict(r) for r in rows]})
+
+    def _get_org(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        row = conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        conn.close()
+        if not row:
+            return json_response(self, 404, {"error": "not found"})
+        return json_response(self, 200, dict(row))
+
+    def _ingest_990(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        body = self._read_body()
+        try:
+            parsed = parsing.parse_990_xml(body)
+        except Exception as e:
+            return json_response(self, 400, {"error": f"could not parse XML: {e}"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute(
+            """INSERT INTO financial_snapshots
+               (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
+                net_assets, contributions_revenue, program_revenue, ingested_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                org_id, "990", parsed.get("tax_year"), parsed.get("total_revenue"), parsed.get("total_expenses"),
+                parsed.get("total_assets"), parsed.get("net_assets"), parsed.get("contributions_revenue"),
+                parsed.get("program_revenue"), db.now(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"ingested": parsed})
+
+    def _get_financial_snapshot(self, org_id):
+        """Returns the latest ingested financial snapshot for an org, or
+        {"snapshot": null} if none has been ingested yet. Read-side
+        counterpart to /ingest-990 and /ingest-financial-data - added
+        specifically so export_to_excel.py (and anything else) can read back
+        what was ingested instead of only being able to write it."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        snap = conn.execute(
+            "SELECT * FROM financial_snapshots WHERE org_id=? ORDER BY ingested_at DESC LIMIT 1", (org_id,)
+        ).fetchone()
+        conn.close()
+        return json_response(self, 200, {"snapshot": dict(snap) if snap else None})
+
+    def _ingest_financial_data(self, org_id):
+        """Accepts pre-parsed financial data as JSON - the same shape
+        fetch_990.py / bulk_ingest.py produce from ProPublica's API - instead
+        of raw 990 XML bytes like /ingest-990. Writes to the same
+        financial_snapshots table so scoring treats both sources identically;
+        the 'source' field on the row records where it actually came from."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute(
+            """INSERT INTO financial_snapshots
+               (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
+                net_assets, contributions_revenue, program_revenue, ingested_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                org_id, data.get("source", "bulk"), data.get("fiscal_year"), data.get("total_revenue"),
+                data.get("total_expenses"), data.get("total_assets"), data.get("net_assets"),
+                data.get("contributions_revenue"), data.get("program_revenue"), db.now(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"saved": data})
+
+    def _set_dimensions(self, org_id):
+        """Manual (or future LLM-sourced) scores for the 7 non-financial dimensions.
+        Body: {"legal": 80, "governance": 60, "strategy": 70, "trackRecord": 65,
+                "outcomes": 55, "leadership": 75, "reporting": 90}"""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute(
+            "INSERT INTO manual_dimensions (org_id, dimensions_json, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(org_id) DO UPDATE SET dimensions_json=excluded.dimensions_json, updated_at=excluded.updated_at",
+            (org_id, json.dumps(data), db.now()),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"saved": data})
+
+    def _get_score(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        result = score_org(conn, org_id)
+        conn.execute(
+            "INSERT INTO readiness_scores (org_id, overall, status, dimensions_json, computed_at) VALUES (?,?,?,?,?)",
+            (org_id, result["overall"], result["status"], json.dumps({"dimensions": result["dimensions"]}), db.now()),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, result)
+
+    def _add_report(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute(
+            "INSERT INTO report_entries (org_id, update_text, overall_before, overall_after, dimensions_json, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (
+                org_id, data.get("updateText", ""), data.get("overallBefore"), data.get("overallAfter"),
+                json.dumps(data.get("dimensions", {})), db.now(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 201, {"saved": True})
+
+    def _list_reports(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        rows = conn.execute(
+            "SELECT * FROM report_entries WHERE org_id=? ORDER BY created_at DESC", (org_id,)
+        ).fetchall()
+        conn.close()
+        return json_response(self, 200, {"reports": [dict(r) for r in rows]})
+
+    # ---------- funders ----------
+    def _create_funder(self):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        if not data.get("name") or not data.get("weights"):
+            return json_response(self, 400, {"error": "name and weights required"})
+        conn = db.get_conn()
+        cur = conn.execute(
+            "INSERT INTO funders (user_id, name, focus, grant_range, approach, weights_json, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (
+                user_id, data["name"], data.get("focus"), data.get("grantRange"), data.get("approach"),
+                json.dumps(data["weights"]), db.now(),
+            ),
+        )
+        conn.commit()
+        funder_id = cur.lastrowid
+        conn.close()
+        return json_response(self, 201, {"id": funder_id})
+
+    def _list_funders(self):
+        conn = db.get_conn()
+        rows = conn.execute("SELECT * FROM funders").fetchall()
+        conn.close()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["weights"] = json.loads(d.pop("weights_json") or "{}")
+            out.append(d)
+        return json_response(self, 200, {"funders": out})
+
+    def _rank_for_funder(self, funder_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        funder = conn.execute("SELECT * FROM funders WHERE id=?", (funder_id,)).fetchone()
+        if not funder:
+            conn.close()
+            return json_response(self, 404, {"error": "funder not found"})
+        weights = json.loads(funder["weights_json"] or "{}")
+        orgs = conn.execute("SELECT id, name FROM organizations WHERE user_id=?", (user_id,)).fetchall()
+
+        results = []
+        for org in orgs:
+            scored = score_org(conn, org["id"])
+            total_w = sum(weights.values()) or 1
+            weighted = 0.0
+            for dim_name, w in weights.items():
+                key = scoring.NAME_TO_KEY.get(dim_name)
+                if key:
+                    weighted += scored["dimensionScores"].get(key, 50) * w
+            results.append({
+                "orgId": org["id"],
+                "orgName": org["name"],
+                "readinessScore": scored["overall"],
+                "weightedScore": round(weighted / total_w, 1),
+            })
+        conn.close()
+        results.sort(key=lambda r: r["weightedScore"], reverse=True)
+        return json_response(self, 200, {"funder": funder["name"], "ranking": results})
+
+
+def main():
+    port = int(os.environ.get("PORT", 8420))
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    print(f"GrantPass backend listening on http://0.0.0.0:{port}  (db: {db.DB_PATH})")
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
