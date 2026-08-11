@@ -33,6 +33,7 @@
   .btn-ghost:hover { background:var(--bg-soft); }
   .btn-sm { padding:6px 12px; font-size:12.5px; }
   .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-link { background:none; border:none; padding:0; color:var(--gold-access); font-weight:700; font-size:12.5px; cursor:pointer; text-decoration:underline; }
   #logoutBtn.btn-ghost { background:transparent; border-color:rgba(255,255,255,.35); color:#fff; }
   #logoutBtn.btn-ghost:hover { background:rgba(255,255,255,.1); }
 
@@ -47,6 +48,7 @@
   .status-msg { font-size:12.5px; color:var(--ink-soft); margin-top:8px; min-height:16px; }
   .status-msg.error { color:var(--red); }
   .status-msg.ok { color:var(--green); }
+  .hint { font-size:12px; color:var(--ink-soft); margin:-6px 0 12px; line-height:1.5; }
 
   .tabs { display:flex; gap:8px; margin-bottom:16px; }
   .tab-btn { font-size:13.5px; font-weight:700; padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:white; cursor:pointer; color:var(--ink-soft); }
@@ -74,6 +76,14 @@
   .list-item:last-child { border-bottom:none; }
   .hidden { display:none !important; }
   .muted { color:var(--ink-soft); font-size:12.5px; }
+
+  .banner { display:flex; align-items:center; gap:10px; background:var(--accent-soft); border:1px solid #E6D8B8; color:var(--gold-access); border-radius:12px; padding:11px 16px; font-size:12.5px; font-weight:600; margin-bottom:16px; }
+  .banner .spinner { width:14px; height:14px; border-radius:50%; border:2px solid #E6D8B8; border-top-color:var(--gold-access); animation:spin .8s linear infinite; flex-shrink:0; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .sample-panel { margin-top:16px; }
+  .sample-panel .score-hero, .sample-panel .dim-row { pointer-events:none; }
+  .sample-badge { display:inline-block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; background:var(--navy); color:#fff; padding:3px 10px; border-radius:999px; margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -89,6 +99,7 @@
 
   <!-- AUTH -->
   <div id="authPanel" class="panel">
+    <div id="warmupBanner" class="banner hidden"><span class="spinner"></span><span>Waking up the server — this can take up to a minute if it's been idle. No need to do anything, it'll be ready shortly.</span></div>
     <div class="tabs">
       <button class="tab-btn active" data-auth="login">Log In</button>
       <button class="tab-btn" data-auth="register">Register</button>
@@ -100,6 +111,13 @@
     <button class="btn btn-primary" id="authSubmitBtn">Log In</button>
     <div class="status-msg" id="authStatus"></div>
     <p class="muted">First time? Switch to Register — this creates a brand new account on your live backend at the URL above.</p>
+    <p class="muted" style="margin-top:10px;">Not ready to sign up yet? <button class="btn-link" id="viewSampleBtn">See a sample scorecard first — no login needed</button></p>
+
+    <div id="samplePanel" class="sample-panel hidden">
+      <div class="sample-badge">Sample — illustrative data, not a real account</div>
+      <div id="sampleResult"></div>
+      <p class="muted" style="margin-top:10px;">This is what a completed scorecard looks like. Log in or register above to build your own.</p>
+    </div>
   </div>
 
   <!-- DASHBOARD -->
@@ -130,21 +148,21 @@
         <h2 id="orgDetailName">—</h2>
 
         <h3>Financial Data</h3>
+        <p class="hint">Optional, but improves your Financial Health score. Leave blank if you don't have exact numbers yet — you can always come back to this.</p>
         <div id="financialSummary" class="muted">No financial data ingested yet.</div>
         <div class="row3" style="margin-top:10px;">
-          <div><label>Total Revenue ($)</label><input id="finRevenue" type="number"></div>
-          <div><label>Total Expenses ($)</label><input id="finExpenses" type="number"></div>
-          <div><label>Total Assets ($)</label><input id="finAssets" type="number"></div>
+          <div><label>Total Revenue ($)</label><input id="finRevenue" type="number" placeholder="0"></div>
+          <div><label>Total Expenses ($)</label><input id="finExpenses" type="number" placeholder="0"></div>
+          <div><label>Total Assets ($)</label><input id="finAssets" type="number" placeholder="0"></div>
         </div>
         <div class="row3">
-          <div><label>Net Assets ($)</label><input id="finNetAssets" type="number"></div>
-          <div><label>Contributions ($)</label><input id="finContrib" type="number"></div>
-          <div><label>Program Revenue ($)</label><input id="finProgram" type="number"></div>
+          <div><label>Net Assets ($)</label><input id="finNetAssets" type="number" placeholder="0"></div>
+          <div><label>Contributions ($)</label><input id="finContrib" type="number" placeholder="0"></div>
+          <div><label>Program Revenue ($)</label><input id="finProgram" type="number" placeholder="0"></div>
         </div>
-        <button class="btn btn-ghost btn-sm" id="saveFinancialsBtn">Save Financial Data</button>
-        <div class="status-msg" id="financialStatus"></div>
 
         <h3>Dimension Scores (0-100)</h3>
+        <p class="hint">Not sure what to put? Leave these at 50 (neutral) for now — you can refine them anytime before sharing a score.</p>
         <div class="row3">
           <div><label>Legal & Compliance</label><input id="dimLegal" type="number" min="0" max="100" value="50"></div>
           <div><label>Governance</label><input id="dimGovernance" type="number" min="0" max="100" value="50"></div>
@@ -158,12 +176,20 @@
         <div class="row3">
           <div><label>Reporting Capacity</label><input id="dimReporting" type="number" min="0" max="100" value="50"></div>
         </div>
-        <button class="btn btn-ghost btn-sm" id="saveDimsBtn">Save Dimension Scores</button>
-        <div class="status-msg" id="dimsStatus"></div>
 
-        <h3>Readiness Score</h3>
-        <button class="btn btn-primary btn-sm" id="calcScoreBtn">Calculate Score</button>
+        <button class="btn btn-primary" id="saveAndScoreBtn">Save & Calculate Score</button>
+        <span class="status-msg" id="saveScoreStatus" style="display:inline-block; margin-left:10px;"></span>
         <div id="scoreResult" style="margin-top:14px;"></div>
+
+        <details style="margin-top:18px;">
+          <summary style="cursor:pointer; font-size:12.5px; font-weight:700; color:var(--ink-soft);">Advanced: save financials or scores separately</summary>
+          <div style="margin-top:12px;">
+            <button class="btn btn-ghost btn-sm" id="saveFinancialsBtn">Save Financial Data Only</button>
+            <div class="status-msg" id="financialStatus"></div>
+            <button class="btn btn-ghost btn-sm" id="saveDimsBtn" style="margin-top:10px;">Save Dimension Scores Only</button>
+            <div class="status-msg" id="dimsStatus"></div>
+          </div>
+        </details>
 
         <h3>Outcome Reports</h3>
         <div id="reportsList" class="muted">No updates yet.</div>
@@ -225,6 +251,21 @@ const RUBRIC = [
   { key:'reporting', name:'Reporting Capacity', weight:10 },
 ];
 
+const SAMPLE_SCORE = {
+  overall: 85.8,
+  status: 'Ready',
+  dimensions: [
+    { name: 'Legal & Compliance', score: 90, level: 'green' },
+    { name: 'Financial Health', score: 86, level: 'green' },
+    { name: 'Governance', score: 85, level: 'green' },
+    { name: 'Strategic Clarity', score: 80, level: 'green' },
+    { name: 'Track Record', score: 88, level: 'green' },
+    { name: 'Outcome Measurement', score: 82, level: 'green' },
+    { name: 'Leadership Stability', score: 78, level: 'yellow' },
+    { name: 'Reporting Capacity', score: 92, level: 'green' },
+  ],
+};
+
 function apiUrl() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
 function getToken() { return localStorage.getItem('gp_token') || ''; }
 function setToken(t) { if (t) localStorage.setItem('gp_token', t); else localStorage.removeItem('gp_token'); }
@@ -233,11 +274,16 @@ async function api(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers['Authorization'] = 'Bearer ' + token;
-  const res = await fetch(apiUrl() + path, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(apiUrl() + path, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    throw new Error('Could not reach the server. It may be waking up from idle — wait 20-30 seconds and try again.');
+  }
   let data = {};
   try { data = await res.json(); } catch (e) {}
   if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
@@ -251,6 +297,48 @@ function levelColor(level) {
 }
 function levelFromScore(s) { return s >= 75 ? 'green' : s >= 55 ? 'yellow' : 'red'; }
 function pillClass(level) { return level === 'green' ? 'green' : level === 'yellow' ? 'amber' : 'red'; }
+
+function renderScoreCard(data) {
+  const level = levelFromScore(data.overall);
+  let html = `
+    <div class="score-hero" style="background:${level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)'}">
+      <div class="score-num" style="color:${levelColor(level)}">${Math.round(data.overall)}</div>
+      <div><strong>${data.status}</strong><br><span class="muted">Weighted overall readiness score</span></div>
+    </div>`;
+  (data.dimensions || []).forEach(d => {
+    html += `<div class="dim-row">
+      <div>${d.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${d.score}%;background:${levelColor(d.level)}"></div></div>
+      <div style="text-align:right;font-weight:700;">${Math.round(d.score)}</div>
+    </div>`;
+  });
+  return html;
+}
+
+// ---------- WARM-UP PING ----------
+(function warmUp() {
+  const banner = document.getElementById('warmupBanner');
+  const showTimer = setTimeout(() => banner.classList.remove('hidden'), 1500);
+  fetch(apiUrl() + '/health').catch(() => {}).finally(() => {
+    clearTimeout(showTimer);
+    banner.classList.add('hidden');
+  });
+})();
+
+// ---------- SAMPLE SCORECARD (no login) ----------
+document.getElementById('viewSampleBtn').addEventListener('click', () => {
+  const panel = document.getElementById('samplePanel');
+  const btn = document.getElementById('viewSampleBtn');
+  const isHidden = panel.classList.contains('hidden');
+  if (isHidden) {
+    document.getElementById('sampleResult').innerHTML = renderScoreCard(SAMPLE_SCORE);
+    panel.classList.remove('hidden');
+    btn.textContent = 'Hide sample scorecard';
+  } else {
+    panel.classList.add('hidden');
+    btn.textContent = 'See a sample scorecard first — no login needed';
+  }
+});
 
 // ---------- AUTH ----------
 let authMode = 'login';
@@ -267,8 +355,10 @@ document.getElementById('authSubmitBtn').addEventListener('click', async () => {
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   const statusEl = document.getElementById('authStatus');
+  const btn = document.getElementById('authSubmitBtn');
   statusEl.className = 'status-msg';
-  statusEl.textContent = 'Working...';
+  statusEl.textContent = 'Connecting — this can take up to a minute if the server was asleep...';
+  btn.disabled = true;
   try {
     const path = authMode === 'login' ? '/auth/login' : '/auth/register';
     const data = await api('POST', path, { email, password });
@@ -279,6 +369,8 @@ document.getElementById('authSubmitBtn').addEventListener('click', async () => {
   } catch (e) {
     statusEl.className = 'status-msg error';
     statusEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -377,10 +469,8 @@ async function selectOrg(id) {
   await loadReports(id);
 }
 
-document.getElementById('saveFinancialsBtn').addEventListener('click', async () => {
-  if (!selectedOrgId) return;
-  const statusEl = document.getElementById('financialStatus');
-  const body = {
+function collectFinancialsBody() {
+  return {
     source: 'manual',
     total_revenue: Number(document.getElementById('finRevenue').value) || 0,
     total_expenses: Number(document.getElementById('finExpenses').value) || 0,
@@ -389,8 +479,25 @@ document.getElementById('saveFinancialsBtn').addEventListener('click', async () 
     contributions_revenue: Number(document.getElementById('finContrib').value) || 0,
     program_revenue: Number(document.getElementById('finProgram').value) || 0,
   };
+}
+
+function collectDimensionsBody() {
+  return {
+    legal: Number(document.getElementById('dimLegal').value),
+    governance: Number(document.getElementById('dimGovernance').value),
+    strategy: Number(document.getElementById('dimStrategy').value),
+    trackRecord: Number(document.getElementById('dimTrackRecord').value),
+    outcomes: Number(document.getElementById('dimOutcomes').value),
+    leadership: Number(document.getElementById('dimLeadership').value),
+    reporting: Number(document.getElementById('dimReporting').value),
+  };
+}
+
+document.getElementById('saveFinancialsBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const statusEl = document.getElementById('financialStatus');
   try {
-    await api('POST', `/orgs/${selectedOrgId}/ingest-financial-data`, body);
+    await api('POST', `/orgs/${selectedOrgId}/ingest-financial-data`, collectFinancialsBody());
     statusEl.className = 'status-msg ok';
     statusEl.textContent = 'Saved.';
   } catch (e) {
@@ -402,17 +509,8 @@ document.getElementById('saveFinancialsBtn').addEventListener('click', async () 
 document.getElementById('saveDimsBtn').addEventListener('click', async () => {
   if (!selectedOrgId) return;
   const statusEl = document.getElementById('dimsStatus');
-  const body = {
-    legal: Number(document.getElementById('dimLegal').value),
-    governance: Number(document.getElementById('dimGovernance').value),
-    strategy: Number(document.getElementById('dimStrategy').value),
-    trackRecord: Number(document.getElementById('dimTrackRecord').value),
-    outcomes: Number(document.getElementById('dimOutcomes').value),
-    leadership: Number(document.getElementById('dimLeadership').value),
-    reporting: Number(document.getElementById('dimReporting').value),
-  };
   try {
-    await api('POST', `/orgs/${selectedOrgId}/dimensions`, body);
+    await api('POST', `/orgs/${selectedOrgId}/dimensions`, collectDimensionsBody());
     statusEl.className = 'status-msg ok';
     statusEl.textContent = 'Saved.';
   } catch (e) {
@@ -421,28 +519,28 @@ document.getElementById('saveDimsBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('calcScoreBtn').addEventListener('click', async () => {
+document.getElementById('saveAndScoreBtn').addEventListener('click', async () => {
   if (!selectedOrgId) return;
+  const statusEl = document.getElementById('saveScoreStatus');
   const resultEl = document.getElementById('scoreResult');
+  const btn = document.getElementById('saveAndScoreBtn');
+  btn.disabled = true;
+  statusEl.className = 'status-msg';
+  statusEl.textContent = 'Saving...';
   resultEl.innerHTML = '<p class="muted">Calculating...</p>';
   try {
+    await api('POST', `/orgs/${selectedOrgId}/ingest-financial-data`, collectFinancialsBody());
+    await api('POST', `/orgs/${selectedOrgId}/dimensions`, collectDimensionsBody());
     const data = await api('GET', `/orgs/${selectedOrgId}/score`);
-    const level = levelFromScore(data.overall);
-    let html = `
-      <div class="score-hero" style="background:${level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)'}">
-        <div class="score-num" style="color:${levelColor(level)}">${Math.round(data.overall)}</div>
-        <div><strong>${data.status}</strong><br><span class="muted">Weighted overall readiness score</span></div>
-      </div>`;
-    (data.dimensions || []).forEach(d => {
-      html += `<div class="dim-row">
-        <div>${d.name}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${d.score}%;background:${levelColor(d.level)}"></div></div>
-        <div style="text-align:right;font-weight:700;">${Math.round(d.score)}</div>
-      </div>`;
-    });
-    resultEl.innerHTML = html;
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Saved and scored.';
+    resultEl.innerHTML = renderScoreCard(data);
   } catch (e) {
-    resultEl.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = e.message;
+    resultEl.innerHTML = '';
+  } finally {
+    btn.disabled = false;
   }
 });
 
