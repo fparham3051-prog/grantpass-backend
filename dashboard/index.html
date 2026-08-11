@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GrantPass Console</title>
+<style>
+  :root {
+    color-scheme: light;
+    /* Frankly Inspired palette */
+    --navy: #11233D; --navy-deep: #0B1A2D;
+    --gold: #B28E42; --gold-light: #CBA869; --gold-access: #8E7134;
+    --charcoal: #23282D; --muted-1: #55606B; --muted-2: #4A545E;
+    --border-gray: #E2E6EA;
+
+    --bg: #FFFFFF; --bg-soft: #F3F5F7; --ink: var(--charcoal); --ink-soft: var(--muted-1);
+    --line: var(--border-gray); --accent: var(--gold); --accent-dark: var(--gold-access); --accent-soft: #F3ECDC;
+    --red: #C22F2F; --red-bg: #FBEAEA; --amber: var(--gold-access); --amber-bg: #F3ECDC;
+    --green: #1E7A4C; --green-bg: #E4F3EC;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px 24px; }
+  header { display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg,var(--navy),var(--navy-deep)); padding:18px 24px; margin:0 -24px 24px; border-radius:0 0 14px 14px; }
+  .logo { font-weight:800; font-size:19px; color:#fff; }
+  .logo span { color:var(--gold-light); }
+  .api-row { display:flex; align-items:center; gap:8px; font-size:12.5px; color:#C7D0DC; }
+  .api-row input { border:1px solid rgba(255,255,255,.25); border-radius:8px; padding:6px 9px; font-size:12.5px; width:280px; font-family:inherit; background:rgba(255,255,255,.08); color:#fff; }
+  .btn { display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:13.5px; border-radius:9px; padding:9px 16px; cursor:pointer; border:1px solid var(--line); background:white; color:var(--navy); }
+  .btn-primary { background:var(--gold); color:var(--navy); border-color:var(--gold); }
+  .btn-primary:hover { background:var(--gold-access); color:#fff; border-color:var(--gold-access); }
+  .btn-ghost { color:var(--navy); }
+  .btn-ghost:hover { background:var(--bg-soft); }
+  .btn-sm { padding:6px 12px; font-size:12.5px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  #logoutBtn.btn-ghost { background:transparent; border-color:rgba(255,255,255,.35); color:#fff; }
+  #logoutBtn.btn-ghost:hover { background:rgba(255,255,255,.1); }
+
+  .panel { background:var(--bg-soft); border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:18px; }
+  .panel h2 { margin:0 0 14px; font-size:16px; color:var(--navy); }
+  .panel h3 { margin: 18px 0 10px; font-size:13.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
+  label { display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:4px; }
+  input, textarea { width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:14px; font-family:inherit; background:white; margin-bottom:12px; color:var(--ink); }
+  input:focus, textarea:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--accent-soft); }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  .status-msg { font-size:12.5px; color:var(--ink-soft); margin-top:8px; min-height:16px; }
+  .status-msg.error { color:var(--red); }
+  .status-msg.ok { color:var(--green); }
+
+  .tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .tab-btn { font-size:13.5px; font-weight:700; padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:white; cursor:pointer; color:var(--ink-soft); }
+  .tab-btn.active { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .tab-pane { display:none; }
+  .tab-pane.active { display:block; }
+
+  .org-card, .funder-card { border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:white; margin-bottom:10px; cursor:pointer; }
+  .org-card.selected { border-color:var(--gold); box-shadow:0 0 0 2px var(--accent-soft); }
+  .org-card .name { font-weight:700; font-size:14.5px; color:var(--navy); }
+  .org-card .meta { font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .pill { display:inline-block; font-size:11px; font-weight:800; padding:3px 10px; border-radius:999px; margin-left:8px; }
+  .pill.green { background:var(--green-bg); color:var(--green); }
+  .pill.amber { background:var(--amber-bg); color:var(--amber); }
+  .pill.red { background:var(--red-bg); color:var(--red); }
+
+  .dim-row { display:grid; grid-template-columns:170px 1fr 40px; align-items:center; gap:10px; font-size:13px; margin-bottom:6px; }
+  .bar-track { background:#EDEFEC; border-radius:999px; height:8px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:999px; }
+
+  .score-hero { display:flex; align-items:center; gap:20px; padding:18px 20px; border-radius:14px; margin-bottom:16px; }
+  .score-num { font-size:40px; font-weight:800; }
+
+  .list-item { border-bottom:1px solid var(--line); padding:10px 0; font-size:13px; }
+  .list-item:last-child { border-bottom:none; }
+  .hidden { display:none !important; }
+  .muted { color:var(--ink-soft); font-size:12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">GrantPass <span>Console</span></div>
+    <div class="api-row">
+      <span>API:</span>
+      <input id="apiUrl" value="https://grantpass-backend.onrender.com">
+      <button class="btn btn-ghost btn-sm hidden" id="logoutBtn">Log out</button>
+    </div>
+  </header>
+
+  <!-- AUTH -->
+  <div id="authPanel" class="panel">
+    <div class="tabs">
+      <button class="tab-btn active" data-auth="login">Log In</button>
+      <button class="tab-btn" data-auth="register">Register</button>
+    </div>
+    <label>Email</label>
+    <input id="authEmail" type="email" placeholder="you@example.org">
+    <label>Password</label>
+    <input id="authPassword" type="password" placeholder="8+ characters">
+    <button class="btn btn-primary" id="authSubmitBtn">Log In</button>
+    <div class="status-msg" id="authStatus"></div>
+    <p class="muted">First time? Switch to Register — this creates a brand new account on your live backend at the URL above.</p>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="hidden">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="orgs">Organizations</button>
+      <button class="tab-btn" data-tab="funders">Funders</button>
+    </div>
+
+    <!-- ORGS TAB -->
+    <div class="tab-pane active" id="tab-orgs">
+      <div class="panel">
+        <h2>New Organization</h2>
+        <div class="row">
+          <div><label>Name</label><input id="newOrgName" placeholder="Riverside Community Kitchen"></div>
+          <div><label>EIN (optional)</label><input id="newOrgEin" placeholder="12-3456789"></div>
+        </div>
+        <button class="btn btn-primary" id="createOrgBtn">Create Organization</button>
+        <div class="status-msg" id="createOrgStatus"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Your Organizations</h2>
+        <div id="orgList"><p class="muted">Loading...</p></div>
+      </div>
+
+      <div class="panel hidden" id="orgDetailPanel">
+        <h2 id="orgDetailName">—</h2>
+
+        <h3>Financial Data</h3>
+        <div id="financialSummary" class="muted">No financial data ingested yet.</div>
+        <div class="row3" style="margin-top:10px;">
+          <div><label>Total Revenue ($)</label><input id="finRevenue" type="number"></div>
+          <div><label>Total Expenses ($)</label><input id="finExpenses" type="number"></div>
+          <div><label>Total Assets ($)</label><input id="finAssets" type="number"></div>
+        </div>
+        <div class="row3">
+          <div><label>Net Assets ($)</label><input id="finNetAssets" type="number"></div>
+          <div><label>Contributions ($)</label><input id="finContrib" type="number"></div>
+          <div><label>Program Revenue ($)</label><input id="finProgram" type="number"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="saveFinancialsBtn">Save Financial Data</button>
+        <div class="status-msg" id="financialStatus"></div>
+
+        <h3>Dimension Scores (0-100)</h3>
+        <div class="row3">
+          <div><label>Legal & Compliance</label><input id="dimLegal" type="number" min="0" max="100" value="50"></div>
+          <div><label>Governance</label><input id="dimGovernance" type="number" min="0" max="100" value="50"></div>
+          <div><label>Strategic Clarity</label><input id="dimStrategy" type="number" min="0" max="100" value="50"></div>
+        </div>
+        <div class="row3">
+          <div><label>Track Record</label><input id="dimTrackRecord" type="number" min="0" max="100" value="50"></div>
+          <div><label>Outcome Measurement</label><input id="dimOutcomes" type="number" min="0" max="100" value="50"></div>
+          <div><label>Leadership Stability</label><input id="dimLeadership" type="number" min="0" max="100" value="50"></div>
+        </div>
+        <div class="row3">
+          <div><label>Reporting Capacity</label><input id="dimReporting" type="number" min="0" max="100" value="50"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="saveDimsBtn">Save Dimension Scores</button>
+        <div class="status-msg" id="dimsStatus"></div>
+
+        <h3>Readiness Score</h3>
+        <button class="btn btn-primary btn-sm" id="calcScoreBtn">Calculate Score</button>
+        <div id="scoreResult" style="margin-top:14px;"></div>
+
+        <h3>Outcome Reports</h3>
+        <div id="reportsList" class="muted">No updates yet.</div>
+        <textarea id="reportText" placeholder="Describe what happened this period..." rows="3" style="margin-top:10px;"></textarea>
+        <button class="btn btn-ghost btn-sm" id="addReportBtn">Log Update</button>
+        <div class="status-msg" id="reportStatus"></div>
+      </div>
+    </div>
+
+    <!-- FUNDERS TAB -->
+    <div class="tab-pane" id="tab-funders">
+      <div class="panel">
+        <h2>New Funder</h2>
+        <div class="row">
+          <div><label>Name</label><input id="funderName" placeholder="North Star Family Foundation"></div>
+          <div><label>Typical Grant Range</label><input id="funderRange" placeholder="$50K – $500K"></div>
+        </div>
+        <label>Focus Area</label>
+        <input id="funderFocus" placeholder="Youth development, education">
+        <label>Approach</label>
+        <input id="funderApproach" placeholder="Traditional institutional funder, requires audited financials...">
+        <p class="muted" style="margin-bottom:8px;">Weights (should add to roughly 100):</p>
+        <div class="row3">
+          <div><label>Legal & Compliance</label><input id="wLegal" type="number" value="15"></div>
+          <div><label>Financial Health</label><input id="wFinancial" type="number" value="20"></div>
+          <div><label>Governance</label><input id="wGovernance" type="number" value="10"></div>
+        </div>
+        <div class="row3">
+          <div><label>Strategic Clarity</label><input id="wStrategy" type="number" value="10"></div>
+          <div><label>Track Record</label><input id="wTrackRecord" type="number" value="15"></div>
+          <div><label>Outcome Measurement</label><input id="wOutcomes" type="number" value="15"></div>
+        </div>
+        <div class="row3">
+          <div><label>Leadership Stability</label><input id="wLeadership" type="number" value="5"></div>
+          <div><label>Reporting Capacity</label><input id="wReporting" type="number" value="10"></div>
+          <div></div>
+        </div>
+        <button class="btn btn-primary" id="createFunderBtn">Create Funder</button>
+        <div class="status-msg" id="createFunderStatus"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Funders</h2>
+        <div id="funderList"><p class="muted">Loading...</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RUBRIC = [
+  { key:'legal', name:'Legal & Compliance', weight:15 },
+  { key:'financial', name:'Financial Health', weight:20 },
+  { key:'governance', name:'Governance', weight:10 },
+  { key:'strategy', name:'Strategic Clarity', weight:10 },
+  { key:'trackRecord', name:'Track Record', weight:15 },
+  { key:'outcomes', name:'Outcome Measurement', weight:15 },
+  { key:'leadership', name:'Leadership Stability', weight:5 },
+  { key:'reporting', name:'Reporting Capacity', weight:10 },
+];
+
+function apiUrl() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
+function getToken() { return localStorage.getItem('gp_token') || ''; }
+function setToken(t) { if (t) localStorage.setItem('gp_token', t); else localStorage.removeItem('gp_token'); }
+
+async function api(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = getToken();
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(apiUrl() + path, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  return data;
+}
+
+function levelColor(level) {
+  return level === 'green' ? getComputedStyle(document.documentElement).getPropertyValue('--green')
+    : level === 'yellow' ? getComputedStyle(document.documentElement).getPropertyValue('--amber')
+    : getComputedStyle(document.documentElement).getPropertyValue('--red');
+}
+function levelFromScore(s) { return s >= 75 ? 'green' : s >= 55 ? 'yellow' : 'red'; }
+function pillClass(level) { return level === 'green' ? 'green' : level === 'yellow' ? 'amber' : 'red'; }
+
+// ---------- AUTH ----------
+let authMode = 'login';
+document.querySelectorAll('[data-auth]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    authMode = btn.dataset.auth;
+    document.querySelectorAll('[data-auth]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Log In' : 'Create Account';
+  });
+});
+
+document.getElementById('authSubmitBtn').addEventListener('click', async () => {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const statusEl = document.getElementById('authStatus');
+  statusEl.className = 'status-msg';
+  statusEl.textContent = 'Working...';
+  try {
+    const path = authMode === 'login' ? '/auth/login' : '/auth/register';
+    const data = await api('POST', path, { email, password });
+    setToken(data.token);
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Success.';
+    showDashboard();
+  } catch (e) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = e.message;
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  setToken(null);
+  location.reload();
+});
+
+function showDashboard() {
+  document.getElementById('authPanel').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+  document.getElementById('logoutBtn').classList.remove('hidden');
+  loadOrgs();
+  loadFunders();
+}
+
+if (getToken()) showDashboard();
+
+// ---------- TABS ----------
+document.querySelectorAll('[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-tab]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------- ORGS ----------
+let orgs = [];
+let selectedOrgId = null;
+
+async function loadOrgs() {
+  const listEl = document.getElementById('orgList');
+  try {
+    const data = await api('GET', '/orgs');
+    orgs = data.organizations || [];
+    if (orgs.length === 0) { listEl.innerHTML = '<p class="muted">No organizations yet — create one above.</p>'; return; }
+    listEl.innerHTML = '';
+    orgs.forEach(org => {
+      const card = document.createElement('div');
+      card.className = 'org-card' + (org.id === selectedOrgId ? ' selected' : '');
+      card.innerHTML = `<div class="name">${org.name}</div><div class="meta">${org.ein ? 'EIN ' + org.ein : 'No EIN on file'}</div>`;
+      card.addEventListener('click', () => selectOrg(org.id));
+      listEl.appendChild(card);
+    });
+  } catch (e) {
+    listEl.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+  }
+}
+
+document.getElementById('createOrgBtn').addEventListener('click', async () => {
+  const name = document.getElementById('newOrgName').value.trim();
+  const ein = document.getElementById('newOrgEin').value.trim();
+  const statusEl = document.getElementById('createOrgStatus');
+  if (!name) { statusEl.className = 'status-msg error'; statusEl.textContent = 'Name is required.'; return; }
+  try {
+    await api('POST', '/orgs', { name, ein: ein || undefined });
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Created.';
+    document.getElementById('newOrgName').value = '';
+    document.getElementById('newOrgEin').value = '';
+    loadOrgs();
+  } catch (e) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = e.message;
+  }
+});
+
+async function selectOrg(id) {
+  selectedOrgId = id;
+  loadOrgs();
+  const org = orgs.find(o => o.id === id);
+  document.getElementById('orgDetailPanel').classList.remove('hidden');
+  document.getElementById('orgDetailName').textContent = org ? org.name : 'Organization';
+  document.getElementById('scoreResult').innerHTML = '';
+
+  try {
+    const snap = await api('GET', `/orgs/${id}/financial-snapshot`);
+    const el = document.getElementById('financialSummary');
+    if (snap.snapshot) {
+      const s = snap.snapshot;
+      el.innerHTML = `Latest snapshot (source: ${s.source}, FY${s.fiscal_year || '—'}): revenue $${Number(s.total_revenue || 0).toLocaleString()}, expenses $${Number(s.total_expenses || 0).toLocaleString()}`;
+      document.getElementById('finRevenue').value = s.total_revenue ?? '';
+      document.getElementById('finExpenses').value = s.total_expenses ?? '';
+      document.getElementById('finAssets').value = s.total_assets ?? '';
+      document.getElementById('finNetAssets').value = s.net_assets ?? '';
+      document.getElementById('finContrib').value = s.contributions_revenue ?? '';
+      document.getElementById('finProgram').value = s.program_revenue ?? '';
+    } else {
+      el.textContent = 'No financial data ingested yet.';
+      ['finRevenue','finExpenses','finAssets','finNetAssets','finContrib','finProgram'].forEach(id2 => document.getElementById(id2).value = '');
+    }
+  } catch (e) { /* non-fatal */ }
+
+  await loadReports(id);
+}
+
+document.getElementById('saveFinancialsBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const statusEl = document.getElementById('financialStatus');
+  const body = {
+    source: 'manual',
+    total_revenue: Number(document.getElementById('finRevenue').value) || 0,
+    total_expenses: Number(document.getElementById('finExpenses').value) || 0,
+    total_assets: Number(document.getElementById('finAssets').value) || 0,
+    net_assets: Number(document.getElementById('finNetAssets').value) || 0,
+    contributions_revenue: Number(document.getElementById('finContrib').value) || 0,
+    program_revenue: Number(document.getElementById('finProgram').value) || 0,
+  };
+  try {
+    await api('POST', `/orgs/${selectedOrgId}/ingest-financial-data`, body);
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Saved.';
+  } catch (e) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = e.message;
+  }
+});
+
+document.getElementById('saveDimsBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const statusEl = document.getElementById('dimsStatus');
+  const body = {
+    legal: Number(document.getElementById('dimLegal').value),
+    governance: Number(document.getElementById('dimGovernance').value),
+    strategy: Number(document.getElementById('dimStrategy').value),
+    trackRecord: Number(document.getElementById('dimTrackRecord').value),
+    outcomes: Number(document.getElementById('dimOutcomes').value),
+    leadership: Number(document.getElementById('dimLeadership').value),
+    reporting: Number(document.getElementById('dimReporting').value),
+  };
+  try {
+    await api('POST', `/orgs/${selectedOrgId}/dimensions`, body);
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Saved.';
+  } catch (e) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = e.message;
+  }
+});
+
+document.getElementById('calcScoreBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const resultEl = document.getElementById('scoreResult');
+  resultEl.innerHTML = '<p class="muted">Calculating...</p>';
+  try {
+    const data = await api('GET', `/orgs/${selectedOrgId}/score`);
+    const level = levelFromScore(data.overall);
+    let html = `
+      <div class="score-hero" style="background:${level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)'}">
+        <div class="score-num" style="color:${levelColor(level)}">${Math.round(data.overall)}</div>
+        <div><strong>${data.status}</strong><br><span class="muted">Weighted overall readiness score</span></div>
+      </div>`;
+    (data.dimensions || []).forEach(d => {
+      html += `<div class="dim-row">
+        <div>${d.name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${d.score}%;background:${levelColor(d.level)}"></div></div>
+        <div style="text-align:right;font-weight:700;">${Math.round(d.score)}</div>
+      </div>`;
+    });
+    resultEl.innerHTML = html;
+  } catch (e) {
+    resultEl.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+  }
+});
+
+async function loadReports(orgId) {
+  const el = document.getElementById('reportsList');
+  try {
+    const data = await api('GET', `/orgs/${orgId}/reports`);
+    const reports = data.reports || [];
+    if (reports.length === 0) { el.innerHTML = '<p class="muted">No updates yet.</p>'; return; }
+    el.innerHTML = reports.map(r => `<div class="list-item"><strong>${new Date(r.created_at).toLocaleDateString()}</strong> — ${r.update_text}</div>`).join('');
+  } catch (e) {
+    el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+  }
+}
+
+document.getElementById('addReportBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const text = document.getElementById('reportText').value.trim();
+  const statusEl = document.getElementById('reportStatus');
+  if (!text) { statusEl.className = 'status-msg error'; statusEl.textContent = 'Enter an update first.'; return; }
+  try {
+    await api('POST', `/orgs/${selectedOrgId}/reports`, { updateText: text });
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Logged.';
+    document.getElementById('reportText').value = '';
+    loadReports(selectedOrgId);
+  } catch (e) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = e.message;
+  }
+});
+
+// ---------- FUNDERS ----------
+async function loadFunders() {
+  const el = document.getElementById('funderList');
+  try {
+    const data = await api('GET', '/funders');
+    const funders = data.funders || [];
+    if (funders.length === 0) { el.innerHTML = '<p class="muted">No funders yet — create one above.</p>'; return; }
+    el.innerHTML = '';
+    funders.forEach(f => {
+      const card = document.createElement('div');
+      card.className = 'funder-card';
+      card.innerHTML = `
+        <div class="name">${f.name}</div>
+        <div class="meta">${f.focus || ''} ${f.grant_range ? '· ' + f.grant_range : ''}</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" data-rank="${f.id}">Rank My Orgs</button>
+        <div class="rank-result" id="rank-${f.id}" style="margin-top:10px;"></div>
+      `;
+      el.appendChild(card);
+    });
+    el.querySelectorAll('[data-rank]').forEach(btn => {
+      btn.addEventListener('click', () => rankForFunder(btn.dataset.rank));
+    });
+  } catch (e) {
+    el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+  }
+}
+
+async function rankForFunder(funderId) {
+  const el = document.getElementById('rank-' + funderId);
+  el.innerHTML = '<p class="muted">Ranking...</p>';
+  try {
+    const data = await api('GET', `/funders/${funderId}/rank`);
+    const ranking = data.ranking || [];
+    if (ranking.length === 0) { el.innerHTML = '<p class="muted">No organizations to rank yet.</p>'; return; }
+    el.innerHTML = ranking.map((r, i) =>
+      `<div class="list-item">#${i + 1} <strong>${r.orgName}</strong> — weighted ${r.weightedScore} (readiness ${r.readinessScore})</div>`
+    ).join('');
+  } catch (e) {
+    el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+  }
+}
+
+document.getElementById('createFunderBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('createFunderStatus');
+  const name = document.getElementById('funderName').value.trim();
+  if (!name) { statusEl.className = 'status-msg error'; statusEl.textContent = 'Name is required.'; return; }
+  const weights = {};
+  RUBRIC.forEach(r => {
+    const idMap = { legal:'wLegal', financial:'wFinancial', governance:'wGovernance', strategy:'wStrategy',
+      trackRecord:'wTrackRecord', outcomes:'wOutcomes', leadership:'wLeadership', reporting:'wReporting' };
+    weights[r.name] = Number(document.getElementById(idMap[r.key]).value) || 0;
+  });
+  try {
+    await api('POST', '/funders', {
+      name,
+      focus: document.getElementById('funderFocus').value.trim(),
+      grantRange: document.getElementById('funderRange').value.trim(),
+      approach: document.getElementById('funderApproach').value.trim(),
+      weights,
+    });
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Created.';
+    loadFunders();
+  } catch (e) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = e.message;
+  }
+});
+</script>
+</body>
+</html>
