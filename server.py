@@ -169,6 +169,10 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "GET":
                 return self._get_score(int(m.group(1)))
 
+            m = re.match(r"^/orgs/(\d+)/full-report$", path)
+            if m and method == "GET":
+                return self._get_full_report(int(m.group(1)))
+
             m = re.match(r"^/orgs/(\d+)/reports$", path)
             if m and method == "POST":
                 return self._add_report(int(m.group(1)))
@@ -392,6 +396,87 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         conn.close()
         return json_response(self, 200, result)
+
+    # Human-readable labels for the 8 donor-sustainability dimensions, in the
+    # same order they appear on the Google Form (sections 2-9). Kept here
+    # rather than in db.py since it's presentation-only, not schema.
+    DONOR_DIMENSION_LABELS = [
+        ("grassroots_cultivation", "Grassroots Cultivation Culture"),
+        ("stewardship_infrastructure", "Stewardship Infrastructure"),
+        ("engagement_cadence", "Non-Transactional Engagement Cadence"),
+        ("first_gift_follow_through", "First-Gift Follow-Through"),
+        ("ownership_clarity", "Relationship Ownership Clarity"),
+        ("board_readiness", "Board Fundraising Readiness"),
+        ("donor_data_maturity", "Donor Data Maturity"),
+        ("early_warning_capacity", "Early-Warning Capacity"),
+    ]
+
+        def _get_full_report(self, org_id):
+        """Combined view for the dashboard: this org's GrantPass readiness
+        score (financial + manual dimensions) alongside its most recent
+        Donor Sustainability & Stewardship Assessment submission, if any.
+        These are two separate rubrics fed by two separate intake paths
+        (dashboard forms vs. the standalone Google Form), so this endpoint
+        is purely a read-side join for display - it writes nothing and
+        doesn't touch readiness_scores history the way GET /score does.
+
+        Donor-sustainability responses are matched to this org by stored
+        org_id when the ingest-time name match succeeded, OR by a live
+        case-insensitive name match as a fallback for responses submitted
+        before this org existed in GrantPass (or where the name didn't
+        match exactly at ingest time)."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+
+        readiness = score_org(conn, org_id)
+
+        rows = conn.execute(
+            """SELECT * FROM donor_sustainability_responses
+               WHERE org_id=? OR (org_id IS NULL AND lower(org_name)=lower(?))
+               ORDER BY submitted_at DESC""",
+            (org_id, org["name"]),
+        ).fetchall()
+        conn.close()
+
+        donor = {"hasData": False, "responseCount": 0, "latest": None, "averageScore": None,
+                 "dimensions": [], "history": []}
+        if rows:
+            latest = dict(rows[0])
+            scores_present = [r["average_score"] for r in rows if r["average_score"] is not None]
+            donor["hasData"] = True
+            donor["responseCount"] = len(rows)
+            donor["averageScore"] = round(sum(scores_present) / len(scores_present), 1) if scores_present else None
+            donor["latest"] = {
+                "submittedAt": latest["submitted_at"],
+                "respondentRole": latest["respondent_role"],
+                "averageScore": latest["average_score"],
+                "finalNotes": latest["final_notes"],
+                "evidence": json.loads(latest["evidence_json"] or "{}"),
+            }
+            donor["dimensions"] = [
+                {
+                    "key": col, "name": label,
+                    "rating": latest[col],
+                    "score": round((latest[col] - 1) / 4 * 100, 1) if latest[col] is not None else None,
+                }
+                for col, label in self.DONOR_DIMENSION_LABELS
+            ]
+            donor["history"] = [
+                {"submittedAt": r["submitted_at"], "averageScore": r["average_score"], "respondentRole": r["respondent_role"]}
+                for r in rows
+            ]
+
+        return json_response(self, 200, {
+            "org": {"id": org["id"], "name": org["name"]},
+            "readiness": readiness,
+            "donorSustainability": donor,
+        })
 
     def _add_report(self, org_id):
         user_id = get_auth_user(self)
