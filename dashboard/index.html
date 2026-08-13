@@ -147,6 +147,10 @@
       <div class="panel hidden" id="orgDetailPanel">
         <h2 id="orgDetailName">—</h2>
 
+        <h3>Full Report</h3>
+        <p class="hint">Readiness score (financial + manual dimensions) alongside this org's most recent Donor Sustainability &amp; Stewardship Assessment, if they've taken it.</p>
+        <div id="fullReportResult"><p class="muted">Loading...</p></div>
+
         <h3>Financial Data</h3>
         <p class="hint">Optional, but improves your Financial Health score. Leave blank if you don't have exact numbers yet — you can always come back to this.</p>
         <div id="financialSummary" class="muted">No financial data ingested yet.</div>
@@ -266,6 +270,8 @@ const SAMPLE_SCORE = {
   ],
 };
 
+const DONOR_SURVEY_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSf4CUk9LeZiP3M_PUl8AxCYffxVZ0k9sZh4oauvZci99M18AQ/viewform';
+
 function apiUrl() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
 function getToken() { return localStorage.getItem('gp_token') || ''; }
 function setToken(t) { if (t) localStorage.setItem('gp_token', t); else localStorage.removeItem('gp_token'); }
@@ -313,6 +319,53 @@ function renderScoreCard(data) {
     </div>`;
   });
   return html;
+}
+
+function renderDonorCard(donor, orgName) {
+  if (!donor || !donor.hasData) {
+    const shareUrl = DONOR_SURVEY_URL;
+    return `<div class="panel" style="background:white; margin-bottom:0;">
+      <p class="muted">No Donor Sustainability &amp; Stewardship Assessment on file for this org yet.</p>
+      <p class="hint">Send this link to whoever runs development/fundraising there — org name to enter: <strong>${orgName}</strong></p>
+      <div class="row" style="grid-template-columns:1fr auto; gap:8px; align-items:start;">
+        <input readonly value="${shareUrl}" onclick="this.select()">
+        <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${shareUrl}').then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Copy link',1200)})">Copy link</button>
+      </div>
+    </div>`;
+  }
+  const level = levelFromScore(donor.averageScore);
+  let html = `
+    <div class="score-hero" style="background:${level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)'}">
+      <div class="score-num" style="color:${levelColor(level)}">${Math.round(donor.averageScore)}</div>
+      <div><strong>Donor Sustainability</strong><br><span class="muted">${donor.responseCount} response${donor.responseCount === 1 ? '' : 's'} · latest ${new Date(donor.latest.submittedAt).toLocaleDateString()}${donor.latest.respondentRole ? ' · ' + donor.latest.respondentRole : ''}</span></div>
+    </div>`;
+  donor.dimensions.forEach(d => {
+    const dLevel = d.score == null ? 'red' : levelFromScore(d.score);
+    html += `<div class="dim-row">
+      <div>${d.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${d.score ?? 0}%;background:${levelColor(dLevel)}"></div></div>
+      <div style="text-align:right;font-weight:700;">${d.rating != null ? d.rating + '/5' : '—'}</div>
+    </div>`;
+  });
+  if (donor.latest.finalNotes) {
+    html += `<p class="hint" style="margin-top:10px;"><strong>Respondent's note:</strong> ${donor.latest.finalNotes}</p>`;
+  }
+  return html;
+}
+
+async function loadFullReport(orgId, orgName) {
+  const el = document.getElementById('fullReportResult');
+  el.innerHTML = '<p class="muted">Loading...</p>';
+  try {
+    const data = await api('GET', `/orgs/${orgId}/full-report`);
+    el.innerHTML = `
+      <div class="row" style="align-items:start;">
+        <div><h3 style="margin-top:0;">Readiness</h3>${renderScoreCard(data.readiness)}</div>
+        <div><h3 style="margin-top:0;">Donor Sustainability</h3>${renderDonorCard(data.donorSustainability, orgName)}</div>
+      </div>`;
+  } catch (e) {
+    el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+  }
 }
 
 // ---------- WARM-UP PING ----------
@@ -448,6 +501,8 @@ async function selectOrg(id) {
   document.getElementById('orgDetailName').textContent = org ? org.name : 'Organization';
   document.getElementById('scoreResult').innerHTML = '';
 
+  loadFullReport(id, org ? org.name : '');
+
   try {
     const snap = await api('GET', `/orgs/${id}/financial-snapshot`);
     const el = document.getElementById('financialSummary');
@@ -535,6 +590,8 @@ document.getElementById('saveAndScoreBtn').addEventListener('click', async () =>
     statusEl.className = 'status-msg ok';
     statusEl.textContent = 'Saved and scored.';
     resultEl.innerHTML = renderScoreCard(data);
+    const org = orgs.find(o => o.id === selectedOrgId);
+    loadFullReport(selectedOrgId, org ? org.name : '');
   } catch (e) {
     statusEl.className = 'status-msg error';
     statusEl.textContent = e.message;
