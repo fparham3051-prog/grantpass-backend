@@ -84,6 +84,12 @@
   .sample-panel { margin-top:16px; }
   .sample-panel .score-hero, .sample-panel .dim-row { pointer-events:none; }
   .sample-badge { display:inline-block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; background:var(--navy); color:#fff; padding:3px 10px; border-radius:999px; margin-bottom:10px; }
+
+  .dropzone { border:2px dashed var(--line); border-radius:12px; padding:16px; text-align:center; font-size:12.5px; color:var(--ink-soft); cursor:pointer; margin-bottom:14px; transition:.15s; background:white; }
+  .dropzone:hover, .dropzone.drag-over { border-color:var(--gold); background:var(--accent-soft); color:var(--gold-access); }
+  .dropzone strong { color:var(--navy); }
+  .dropzone input[type=file] { display:none; }
+  .dropzone .dz-status { margin-top:6px; }
 </style>
 </head>
 <body>
@@ -131,6 +137,11 @@
     <div class="tab-pane active" id="tab-orgs">
       <div class="panel">
         <h2>New Organization</h2>
+        <div class="dropzone" id="newOrgDropzone">
+          <div>📄 <strong>Drop a 990, budget, or financial statement here</strong> to auto-fill this form — or click to browse</div>
+          <div class="dz-status" id="newOrgDzStatus"></div>
+          <input type="file" id="newOrgFileInput" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt">
+        </div>
         <div class="row">
           <div><label>Name</label><input id="newOrgName" placeholder="Riverside Community Kitchen"></div>
           <div><label>EIN (optional)</label><input id="newOrgEin" placeholder="12-3456789"></div>
@@ -153,6 +164,11 @@
 
         <h3>Financial Data</h3>
         <p class="hint">Optional, but improves your Financial Health score. Leave blank if you don't have exact numbers yet — you can always come back to this.</p>
+        <div class="dropzone" id="finDropzone">
+          <div>📄 <strong>Drop a 990, budget, or financial statement here</strong> to auto-fill the fields below — or click to browse</div>
+          <div class="dz-status" id="finDzStatus"></div>
+          <input type="file" id="finFileInput" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt">
+        </div>
         <div id="financialSummary" class="muted">No financial data ingested yet.</div>
         <div class="row3" style="margin-top:10px;">
           <div><label>Total Revenue ($)</label><input id="finRevenue" type="number" placeholder="0"></div>
@@ -243,6 +259,9 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const RUBRIC = [
   { key:'legal', name:'Legal & Compliance', weight:15 },
@@ -368,6 +387,187 @@ async function loadFullReport(orgId, orgName) {
   }
 }
 
+// ---------- DOCUMENT AUTO-FILL ----------
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+}
+
+async function extractTextFromPDF(buf) {
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+async function extractTextFromDocx(buf) {
+  const result = await mammoth.extractRawText({ arrayBuffer: buf });
+  return result.value || '';
+}
+
+function extractTextFromSpreadsheet(buf) {
+  const wb = XLSX.read(buf, { type: 'array' });
+  let text = '';
+  wb.SheetNames.forEach(name => {
+    const sheet = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    rows.forEach(row => { text += row.join(' ') + '\n'; });
+  });
+  return text;
+}
+
+async function extractTextFromAnyFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'pdf') {
+    const buf = await file.arrayBuffer();
+    return await extractTextFromPDF(buf);
+  }
+  if (ext === 'docx') {
+    const buf = await file.arrayBuffer();
+    return await extractTextFromDocx(buf);
+  }
+  if (ext === 'xlsx' || ext === 'xls') {
+    const buf = await file.arrayBuffer();
+    return extractTextFromSpreadsheet(buf);
+  }
+  if (ext === 'csv' || ext === 'txt') {
+    return await file.text();
+  }
+  if (ext === 'doc') {
+    throw new Error("Old .doc files aren't supported yet — please save as .docx or .pdf and try again.");
+  }
+  throw new Error('Unsupported file type: .' + ext);
+}
+
+function parseNumber(str) {
+  if (!str) return null;
+  let s = String(str).trim();
+  let negative = false;
+  if (/^\(.*\)$/.test(s)) { negative = true; s = s.slice(1, -1); }
+  s = s.replace(/[^0-9.\-]/g, '');
+  if (!s) return null;
+  const n = parseFloat(s);
+  if (isNaN(n)) return null;
+  return negative ? -n : n;
+}
+
+function findFigure(text, labels) {
+  const lines = text.split(/\n/);
+  const lowerLines = lines.map(l => l.toLowerCase());
+  for (const label of labels) {
+    for (let i = 0; i < lowerLines.length; i++) {
+      const idx = lowerLines[i].indexOf(label);
+      if (idx === -1) continue;
+      const candidates = [lines[i].slice(idx + label.length)];
+      if (lines[i + 1]) candidates.push(lines[i + 1]);
+      if (lines[i + 2]) candidates.push(lines[i + 2]);
+      for (const c of candidates) {
+        const matches = c.match(/\(?\$?-?[\d,]{2,}(?:\.\d+)?\)?/g);
+        if (matches && matches.length) {
+          const val = parseNumber(matches[matches.length - 1]);
+          if (val !== null && Math.abs(val) > 0) return val;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function extractFinancialFigures(text) {
+  const totalRevenue = findFigure(text, ['total revenue']);
+  const totalExpenses = findFigure(text, ['total functional expenses', 'total expenses']);
+  const totalAssets = findFigure(text, ['total assets']);
+  const totalLiabilities = findFigure(text, ['total liabilities']);
+  let netAssets = findFigure(text, ['net assets or fund balances', 'total net assets', 'net assets']);
+  if (netAssets === null && totalAssets !== null && totalLiabilities !== null) {
+    netAssets = totalAssets - totalLiabilities;
+  }
+  const contributions = findFigure(text, ['contributions and grants', 'contributions, gifts, grants', 'total contributions']);
+  const programRevenue = findFigure(text, ['total program service revenue', 'program service revenue']);
+  const einMatch = text.match(/\b\d{2}-\d{7}\b/);
+  return {
+    total_revenue: totalRevenue,
+    total_expenses: totalExpenses,
+    total_assets: totalAssets,
+    net_assets: netAssets,
+    contributions_revenue: contributions,
+    program_revenue: programRevenue,
+    ein: einMatch ? einMatch[0] : null,
+  };
+}
+
+function summarizeFigures(figures) {
+  const found = [];
+  const labels = { total_revenue: 'Revenue', total_expenses: 'Expenses', total_assets: 'Assets', net_assets: 'Net Assets', contributions_revenue: 'Contributions', program_revenue: 'Program Revenue' };
+  Object.keys(labels).forEach(k => {
+    if (figures[k] !== null && figures[k] !== undefined) found.push(labels[k] + ' $' + Math.round(figures[k]).toLocaleString());
+  });
+  return found;
+}
+
+function setupDropzone(zoneId, inputId, statusId, onFile) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  const statusEl = document.getElementById(statusId);
+  if (!zone || !input) return;
+  zone.addEventListener('click', (e) => { if (e.target !== input) input.click(); });
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => {
+    if (input.files && input.files[0]) handleFile(input.files[0]);
+  });
+  async function handleFile(file) {
+    statusEl.className = 'dz-status muted';
+    statusEl.textContent = 'Reading ' + file.name + '...';
+    try {
+      const text = await extractTextFromAnyFile(file);
+      const figures = extractFinancialFigures(text);
+      onFile(figures, file, text);
+    } catch (e) {
+      statusEl.className = 'dz-status status-msg error';
+      statusEl.textContent = e.message || 'Could not read that file.';
+    }
+  }
+}
+
+setupDropzone('finDropzone', 'finFileInput', 'finDzStatus', (figures, file) => {
+  const statusEl = document.getElementById('finDzStatus');
+  const map = { total_revenue: 'finRevenue', total_expenses: 'finExpenses', total_assets: 'finAssets', net_assets: 'finNetAssets', contributions_revenue: 'finContrib', program_revenue: 'finProgram' };
+  let filledAny = false;
+  Object.keys(map).forEach(k => {
+    if (figures[k] !== null && figures[k] !== undefined) {
+      document.getElementById(map[k]).value = Math.round(figures[k]);
+      filledAny = true;
+    }
+  });
+  const found = summarizeFigures(figures);
+  if (filledAny) {
+    statusEl.className = 'dz-status status-msg ok';
+    statusEl.textContent = 'Auto-filled from ' + file.name + ': ' + found.join(', ') + '. Please review before saving.';
+  } else {
+    statusEl.className = 'dz-status status-msg error';
+    statusEl.textContent = "Couldn't find recognizable financial figures in " + file.name + '. Try a different file or enter values manually.';
+  }
+});
+
+let pendingNewOrgFigures = null;
+setupDropzone('newOrgDropzone', 'newOrgFileInput', 'newOrgDzStatus', (figures, file) => {
+  const statusEl = document.getElementById('newOrgDzStatus');
+  if (figures.ein) document.getElementById('newOrgEin').value = figures.ein;
+  pendingNewOrgFigures = figures;
+  const found = summarizeFigures(figures);
+  statusEl.className = 'dz-status status-msg ok';
+  statusEl.textContent = 'Read ' + file.name + '.' + (figures.ein ? ' EIN auto-filled.' : '') + (found.length ? ' Financials found: ' + found.join(', ') + ' — will be added once you create the org.' : ' No financial figures recognized — you can still enter them manually after creating the org.');
+});
+
 // ---------- WARM-UP PING ----------
 (function warmUp() {
   const banner = document.getElementById('warmupBanner');
@@ -486,7 +686,30 @@ document.getElementById('createOrgBtn').addEventListener('click', async () => {
     statusEl.textContent = 'Created.';
     document.getElementById('newOrgName').value = '';
     document.getElementById('newOrgEin').value = '';
-    loadOrgs();
+    const figuresToApply = pendingNewOrgFigures;
+    pendingNewOrgFigures = null;
+    const dzStatus = document.getElementById('newOrgDzStatus');
+    if (dzStatus) dzStatus.textContent = '';
+    await loadOrgs();
+    if (figuresToApply) {
+      const created = orgs.find(o => o.name === name);
+      if (created) {
+        await selectOrg(created.id);
+        const map = { total_revenue: 'finRevenue', total_expenses: 'finExpenses', total_assets: 'finAssets', net_assets: 'finNetAssets', contributions_revenue: 'finContrib', program_revenue: 'finProgram' };
+        let filledAny = false;
+        Object.keys(map).forEach(k => {
+          if (figuresToApply[k] !== null && figuresToApply[k] !== undefined) {
+            document.getElementById(map[k]).value = Math.round(figuresToApply[k]);
+            filledAny = true;
+          }
+        });
+        if (filledAny) {
+          await api('POST', `/orgs/${created.id}/ingest-financial-data`, collectFinancialsBody());
+          loadFullReport(created.id, created.name);
+          statusEl.textContent = 'Created, and financials auto-filled from your document — review below and click Save & Calculate Score.';
+        }
+      }
+    }
   } catch (e) {
     statusEl.className = 'status-msg error';
     statusEl.textContent = e.message;
