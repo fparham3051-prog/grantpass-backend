@@ -83,6 +83,52 @@ CREATE TABLE IF NOT EXISTS report_entries (
     dimensions_json TEXT,
     created_at TEXT NOT NULL
 );
+
+-- Real-world funding outcomes tied to a specific org and (optionally) the
+-- readiness score at the time the outcome is logged. This is the ground-truth
+-- capture that lets the rubric eventually be validated or corrected against
+-- actual funder decisions, instead of only ever scoring against itself. It's
+-- also the first piece of genuinely proprietary data this system produces —
+-- nothing here is derivable from public 990 data.
+CREATE TABLE IF NOT EXISTS outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    funder_name TEXT NOT NULL,
+    result TEXT NOT NULL,           -- 'funded' | 'declined' | 'pending'
+    amount REAL,
+    score_at_time REAL,             -- overall readiness score when this was logged, if known
+    notes TEXT,
+    logged_at TEXT NOT NULL
+);
+
+-- Raw responses from the standalone "Donor Sustainability & Stewardship
+-- Assessment" Google Form, pushed here by an Apps Script onFormSubmit
+-- trigger. Deliberately NOT foreign-keyed to organizations(id): the form
+-- captures org_name as free text from whoever fills it out, so there's no
+-- guaranteed match to an authenticated user's org record at ingest time.
+-- This is a second, complementary rubric (donor retention/stewardship) —
+-- not a straight substitute for one of the 7 manual_dimensions keys - so it
+-- gets its own table rather than being folded into manual_dimensions.
+-- org_id stays nullable for a later manual/fuzzy-match linking step.
+CREATE TABLE IF NOT EXISTS donor_sustainability_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER REFERENCES organizations(id),
+    org_name TEXT,
+    respondent_role TEXT,
+    grassroots_cultivation INTEGER,
+    stewardship_infrastructure INTEGER,
+    engagement_cadence INTEGER,
+    first_gift_follow_through INTEGER,
+    ownership_clarity INTEGER,
+    board_readiness INTEGER,
+    donor_data_maturity INTEGER,
+    early_warning_capacity INTEGER,
+    average_score REAL,
+    evidence_json TEXT,
+    final_notes TEXT,
+    form_response_id TEXT,
+    submitted_at TEXT NOT NULL
+);
 """
 
 

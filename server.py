@@ -39,6 +39,23 @@ def get_auth_user(handler):
     return auth.verify_token(header[7:])
 
 
+def check_ingest_secret(handler) -> bool:
+    """Shared-secret check for the Apps Script -> backend webhook. Separate
+    from user Bearer auth: the Form has no logged-in GrantPass user behind
+    it, just a script running on a trigger. Set GRANTPASS_INGEST_SECRET on
+    the server and give the same value to the Apps Script trigger."""
+    expected = os.environ.get("GRANTPASS_INGEST_SECRET")
+    if not expected:
+        return False
+    provided = handler.headers.get("X-Ingest-Secret", "")
+    return hmac_compare(provided, expected)
+
+
+def hmac_compare(a: str, b: str) -> bool:
+    import hmac as _hmac
+    return _hmac.compare_digest(a or "", b or "")
+
+
 def score_org(conn, org_id: int) -> dict:
     """Shared scoring logic used by /score and /funders/{id}/rank."""
     org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
@@ -158,10 +175,24 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "GET":
                 return self._list_reports(int(m.group(1)))
 
+            m = re.match(r"^/orgs/(\d+)/outcomes$", path)
+            if m and method == "POST":
+                return self._add_outcome(int(m.group(1)))
+            if m and method == "GET":
+                return self._list_outcomes(int(m.group(1)))
+
+            if path == "/export" and method == "GET":
+                return self._export_account()
+
             if path == "/funders" and method == "GET":
                 return self._list_funders()
             if path == "/funders" and method == "POST":
                 return self._create_funder()
+
+            if path == "/donor-sustainability/ingest" and method == "POST":
+                return self._ingest_donor_sustainability()
+            if path == "/donor-sustainability" and method == "GET":
+                return self._list_donor_sustainability()
 
             m = re.match(r"^/funders/(\d+)/rank$", path)
             if m and method == "GET":
@@ -395,6 +426,95 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         return json_response(self, 200, {"reports": [dict(r) for r in rows]})
 
+    # ---------- outcomes (ground truth for the rubric) ----------
+    def _add_outcome(self, org_id):
+        """Body: {"funderName": str, "result": "funded"|"declined"|"pending",
+        "amount": number?, "scoreAtTime": number?, "notes": str?}
+        This is the data that eventually lets you check whether the rubric's
+        scores actually predict who gets funded - log it every time you learn
+        a real outcome, even manually, even for orgs you're advising outside
+        this tool."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        if not data.get("funderName") or not data.get("result"):
+            return json_response(self, 400, {"error": "funderName and result required"})
+        if data["result"] not in ("funded", "declined", "pending"):
+            return json_response(self, 400, {"error": "result must be funded, declined, or pending"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        score_at_time = data.get("scoreAtTime")
+        if score_at_time is None:
+            latest = conn.execute(
+                "SELECT overall FROM readiness_scores WHERE org_id=? ORDER BY computed_at DESC LIMIT 1", (org_id,)
+            ).fetchone()
+            score_at_time = latest["overall"] if latest else None
+        conn.execute(
+            "INSERT INTO outcomes (org_id, funder_name, result, amount, score_at_time, notes, logged_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (org_id, data["funderName"], data["result"], data.get("amount"), score_at_time, data.get("notes"), db.now()),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 201, {"saved": True})
+
+    def _list_outcomes(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        rows = conn.execute(
+            "SELECT * FROM outcomes WHERE org_id=? ORDER BY logged_at DESC", (org_id,)
+        ).fetchall()
+        conn.close()
+        return json_response(self, 200, {"outcomes": [dict(r) for r in rows]})
+
+    # ---------- full-account export (backup, given the free-tier disk isn't persistent) ----------
+    def _export_account(self):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        orgs = conn.execute("SELECT * FROM organizations WHERE user_id=?", (user_id,)).fetchall()
+        export = {"exportedAt": db.now(), "organizations": []}
+        for org in orgs:
+            org_id = org["id"]
+            snapshots = conn.execute(
+                "SELECT * FROM financial_snapshots WHERE org_id=? ORDER BY ingested_at", (org_id,)
+            ).fetchall()
+            manual = conn.execute(
+                "SELECT * FROM manual_dimensions WHERE org_id=?", (org_id,)
+            ).fetchone()
+            scores = conn.execute(
+                "SELECT * FROM readiness_scores WHERE org_id=? ORDER BY computed_at", (org_id,)
+            ).fetchall()
+            reports = conn.execute(
+                "SELECT * FROM report_entries WHERE org_id=? ORDER BY created_at", (org_id,)
+            ).fetchall()
+            outcomes = conn.execute(
+                "SELECT * FROM outcomes WHERE org_id=? ORDER BY logged_at", (org_id,)
+            ).fetchall()
+            export["organizations"].append({
+                "org": dict(org),
+                "financialSnapshots": [dict(r) for r in snapshots],
+                "manualDimensions": dict(manual) if manual else None,
+                "scoreHistory": [dict(r) for r in scores],
+                "reports": [dict(r) for r in reports],
+                "outcomes": [dict(r) for r in outcomes],
+            })
+        funders = conn.execute("SELECT * FROM funders WHERE user_id=?", (user_id,)).fetchall()
+        export["funders"] = [dict(r) for r in funders]
+        conn.close()
+        return json_response(self, 200, export)
+
     # ---------- funders ----------
     def _create_funder(self):
         user_id = get_auth_user(self)
@@ -458,6 +578,110 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         results.sort(key=lambda r: r["weightedScore"], reverse=True)
         return json_response(self, 200, {"funder": funder["name"], "ranking": results})
+
+    # ---------- donor sustainability (fed by the standalone Google Form) ----------
+    def _ingest_donor_sustainability(self):
+        """Webhook target for the Apps Script onFormSubmit trigger on the
+        'Donor Sustainability & Stewardship Assessment' form. Protected by a
+        shared secret (X-Ingest-Secret header), not user Bearer auth, since
+        there's no logged-in GrantPass session behind a form submission.
+
+        Body:
+        {
+          "orgName": str, "respondentRole": str?,
+          "ratings": {"grassrootsCultivation": 1-5, "stewardshipInfrastructure": 1-5,
+                       "engagementCadence": 1-5, "firstGiftFollowThrough": 1-5,
+                       "ownershipClarity": 1-5, "boardReadiness": 1-5,
+                       "donorDataMaturity": 1-5, "earlyWarningCapacity": 1-5},
+          "evidence": {<same 8 keys>: str}, "finalNotes": str?,
+          "formResponseId": str?, "submittedAt": str? (ISO)
+        }"""
+        if not check_ingest_secret(self):
+            return json_response(self, 401, {"error": "invalid or missing ingest secret"})
+        data = self._read_json()
+        ratings = data.get("ratings") or {}
+        keys = [
+            "grassrootsCultivation", "stewardshipInfrastructure", "engagementCadence",
+            "firstGiftFollowThrough", "ownershipClarity", "boardReadiness",
+            "donorDataMaturity", "earlyWarningCapacity",
+        ]
+        col_for_key = {
+            "grassrootsCultivation": "grassroots_cultivation",
+            "stewardshipInfrastructure": "stewardship_infrastructure",
+            "engagementCadence": "engagement_cadence",
+            "firstGiftFollowThrough": "first_gift_follow_through",
+            "ownershipClarity": "ownership_clarity",
+            "boardReadiness": "board_readiness",
+            "donorDataMaturity": "donor_data_maturity",
+            "earlyWarningCapacity": "early_warning_capacity",
+        }
+        present = [ratings[k] for k in keys if isinstance(ratings.get(k), (int, float))]
+        avg_score = round(((sum(present) / len(present)) - 1) / 4 * 100, 1) if present else None
+
+        conn = db.get_conn()
+        org_id = None
+        org_name = (data.get("orgName") or "").strip()
+        if org_name:
+            match = conn.execute(
+                "SELECT id FROM organizations WHERE lower(name)=lower(?) LIMIT 1", (org_name,)
+            ).fetchone()
+            if match:
+                org_id = match["id"]
+        cur = conn.execute(
+            """INSERT INTO donor_sustainability_responses
+               (org_id, org_name, respondent_role, grassroots_cultivation, stewardship_infrastructure,
+                engagement_cadence, first_gift_follow_through, ownership_clarity, board_readiness,
+                donor_data_maturity, early_warning_capacity, average_score, evidence_json, final_notes,
+                form_response_id, submitted_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                org_id, org_name or None, data.get("respondentRole"),
+                ratings.get("grassrootsCultivation"), ratings.get("stewardshipInfrastructure"),
+                ratings.get("engagementCadence"), ratings.get("firstGiftFollowThrough"),
+                ratings.get("ownershipClarity"), ratings.get("boardReadiness"),
+                ratings.get("donorDataMaturity"), ratings.get("earlyWarningCapacity"),
+                avg_score, json.dumps(data.get("evidence") or {}), data.get("finalNotes"),
+                data.get("formResponseId"), data.get("submittedAt") or db.now(),
+            ),
+        )
+        conn.commit()
+        response_id = cur.lastrowid
+        conn.close()
+        return json_response(self, 201, {"saved": True, "id": response_id, "orgId": org_id, "averageScore": avg_score})
+
+    def _list_donor_sustainability(self):
+        """Requires normal user Bearer auth (this is personal data once
+        read back), unlike the ingest endpoint. Optional ?org=<substring>
+        filter on org_name for convenience."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        query = urlparse(self.path).query
+        org_filter = None
+        for part in query.split("&"):
+            if part.startswith("org="):
+                from urllib.parse import unquote_plus
+                org_filter = unquote_plus(part[4:])
+        conn = db.get_conn()
+        if org_filter:
+            rows = conn.execute(
+                "SELECT * FROM donor_sustainability_responses WHERE org_name LIKE ? ORDER BY submitted_at DESC",
+                (f"%{org_filter}%",),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM donor_sustainability_responses ORDER BY submitted_at DESC"
+            ).fetchall()
+        conn.close()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["evidence"] = json.loads(d.pop("evidence_json") or "{}")
+            except Exception:
+                d["evidence"] = {}
+            out.append(d)
+        return json_response(self, 200, {"responses": out})
 
 
 def main():
