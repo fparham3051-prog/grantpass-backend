@@ -411,7 +411,7 @@ class Handler(BaseHTTPRequestHandler):
         ("early_warning_capacity", "Early-Warning Capacity"),
     ]
 
-        def _get_full_report(self, org_id):
+    def _get_full_report(self, org_id):
         """Combined view for the dashboard: this org's GrantPass readiness
         score (financial + manual dimensions) alongside its most recent
         Donor Sustainability & Stewardship Assessment submission, if any.
