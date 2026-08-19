@@ -210,26 +210,26 @@ class Handler(BaseHTTPRequestHandler):
                 return self._rank_for_funder(int(m.group(1)))
 
             m = re.match(r"^/orgs/(\d+)/compliance$", path)
-        if m and method == "GET":
-            return self._list_compliance(int(m.group(1)))
-        if m and method == "POST":
-            return self._create_compliance(int(m.group(1)))
+            if m and method == "GET":
+                return self._list_compliance(int(m.group(1)))
+            if m and method == "POST":
+                return self._create_compliance(int(m.group(1)))
 
-        m = re.match(r"^/compliance/(\d+)$", path)
-        if m and method == "PUT":
-            return self._update_compliance(int(m.group(1)))
-        if m and method == "DELETE":
-            return self._delete_compliance(int(m.group(1)))
+            m = re.match(r"^/compliance/(\d+)$", path)
+            if m and method == "PUT":
+                return self._update_compliance(int(m.group(1)))
+            if m and method == "DELETE":
+                return self._delete_compliance(int(m.group(1)))
 
-        m = re.match(r"^/orgs/(\d+)/share$", path)
-        if m and method == "POST":
-            return self._create_share_link(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/share$", path)
+            if m and method == "POST":
+                return self._create_share_link(int(m.group(1)))
 
-        m = re.match(r"^/public/report/([A-Za-z0-9_-]+)$", path)
-        if m and method == "GET":
-            return self._get_public_report(m.group(1))
+            m = re.match(r"^/public/report/([A-Za-z0-9_-]+)$", path)
+            if m and method == "GET":
+                return self._get_public_report(m.group(1))
 
-        return json_response(self, 404, {"error": "not found"})
+            return json_response(self, 404, {"error": "not found"})
         except Exception as e:
             return json_response(self, 500, {"error": str(e)})
 
