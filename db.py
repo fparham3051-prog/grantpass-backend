@@ -129,6 +129,25 @@ CREATE TABLE IF NOT EXISTS donor_sustainability_responses (
     form_response_id TEXT,
     submitted_at TEXT NOT NULL
 );
+
+-- Compliance calendar: filing deadlines, policy review dates, board
+-- approval cycles. Its own table (not folded into manual_dimensions)
+-- because it's an ongoing operational checklist, not a point-in-time
+-- score -- the thing Salesforce/Asana-style stacks don't give nonprofits:
+-- one place to see what's due, when.
+CREATE TABLE IF NOT EXISTS compliance_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    title TEXT NOT NULL,
+    category TEXT,
+    due_date TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    recurrence TEXT,
+    notes TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL
+);
+
 """
 
 
@@ -142,6 +161,13 @@ def get_conn():
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA)
+    # Lightweight migration for columns added after initial deploy - SQLite
+    # has no "ADD COLUMN IF NOT EXISTS", so just try and swallow the
+    # duplicate-column error on databases that already have it.
+    try:
+        conn.execute("ALTER TABLE organizations ADD COLUMN share_token TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
