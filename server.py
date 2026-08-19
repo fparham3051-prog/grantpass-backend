@@ -11,6 +11,7 @@ See README.md for the full API reference and curl examples.
 import json
 import os
 import re
+import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -131,6 +132,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self._route("POST")
 
+    def do_PUT(self):
+        self._route("PUT")
+
+    def do_DELETE(self):
+        self._route("DELETE")
+
     def _route(self, method):
         path = urlparse(self.path).path
         try:
@@ -202,7 +209,27 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "GET":
                 return self._rank_for_funder(int(m.group(1)))
 
-            return json_response(self, 404, {"error": "not found"})
+            m = re.match(r"^/orgs/(\d+)/compliance$", path)
+        if m and method == "GET":
+            return self._list_compliance(int(m.group(1)))
+        if m and method == "POST":
+            return self._create_compliance(int(m.group(1)))
+
+        m = re.match(r"^/compliance/(\d+)$", path)
+        if m and method == "PUT":
+            return self._update_compliance(int(m.group(1)))
+        if m and method == "DELETE":
+            return self._delete_compliance(int(m.group(1)))
+
+        m = re.match(r"^/orgs/(\d+)/share$", path)
+        if m and method == "POST":
+            return self._create_share_link(int(m.group(1)))
+
+        m = re.match(r"^/public/report/([A-Za-z0-9_-]+)$", path)
+        if m and method == "GET":
+            return self._get_public_report(m.group(1))
+
+        return json_response(self, 404, {"error": "not found"})
         except Exception as e:
             return json_response(self, 500, {"error": str(e)})
 
@@ -768,6 +795,156 @@ class Handler(BaseHTTPRequestHandler):
             out.append(d)
         return json_response(self, 200, {"responses": out})
 
+
+
+    # ---------- compliance calendar ----------
+    def _list_compliance(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        rows = conn.execute(
+            "SELECT * FROM compliance_items WHERE org_id=? ORDER BY (due_date IS NULL), due_date ASC", (org_id,)
+        ).fetchall()
+        conn.close()
+        return json_response(self, 200, {"items": [dict(r) for r in rows]})
+
+    def _create_compliance(self, org_id):
+        """Body: {"title": str, "category": str?, "dueDate": "YYYY-MM-DD"?,
+        "recurrence": str?, "notes": str?}"""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        if not data.get("title"):
+            return json_response(self, 400, {"error": "title required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        cur = conn.execute(
+            "INSERT INTO compliance_items (org_id, title, category, due_date, status, recurrence, notes, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (org_id, data["title"], data.get("category"), data.get("dueDate"), "open",
+             data.get("recurrence"), data.get("notes"), db.now()),
+        )
+        conn.commit()
+        item_id = cur.lastrowid
+        conn.close()
+        return json_response(self, 201, {"id": item_id})
+
+    def _update_compliance(self, item_id):
+        """Body: any subset of {"title","category","dueDate","status","recurrence","notes"}.
+        Ownership is checked via a join on organizations.user_id since
+        compliance_items don't carry user_id directly."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        conn = db.get_conn()
+        row = conn.execute(
+            "SELECT ci.* FROM compliance_items ci JOIN organizations o ON o.id=ci.org_id "
+            "WHERE ci.id=? AND o.user_id=?", (item_id, user_id)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return json_response(self, 404, {"error": "not found"})
+        f = dict(row)
+        for key, col in (("title", "title"), ("category", "category"), ("dueDate", "due_date"),
+                          ("recurrence", "recurrence"), ("notes", "notes")):
+            if key in data:
+                f[col] = data[key]
+        completed_at = f.get("completed_at")
+        if "status" in data:
+            f["status"] = data["status"]
+            completed_at = db.now() if data["status"] == "done" else None
+        conn.execute(
+            "UPDATE compliance_items SET title=?, category=?, due_date=?, status=?, recurrence=?, notes=?, completed_at=? WHERE id=?",
+            (f["title"], f["category"], f["due_date"], f["status"], f["recurrence"], f["notes"], completed_at, item_id),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"saved": True})
+
+    def _delete_compliance(self, item_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        row = conn.execute(
+            "SELECT ci.id FROM compliance_items ci JOIN organizations o ON o.id=ci.org_id "
+            "WHERE ci.id=? AND o.user_id=?", (item_id, user_id)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return json_response(self, 404, {"error": "not found"})
+        conn.execute("DELETE FROM compliance_items WHERE id=?", (item_id,))
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"deleted": True})
+
+    # ---------- funder-ready report sharing ----------
+    def _create_share_link(self, org_id):
+        """Generates (or returns the existing) public share token for this
+        org, so a nonprofit can hand a link straight to a funder without
+        giving them a GrantPass login."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        token = org["share_token"] if "share_token" in org.keys() else None
+        if not token:
+            token = secrets.token_urlsafe(16)
+            conn.execute("UPDATE organizations SET share_token=? WHERE id=?", (token, org_id))
+            conn.commit()
+        conn.close()
+        return json_response(self, 200, {"shareToken": token})
+
+    def _get_public_report(self, token):
+        """Unauthenticated, read-only counterpart to /orgs/{id}/full-report,
+        looked up by share token instead of Bearer auth + ownership. This is
+        the link a nonprofit hands to a funder - deliberately a smaller
+        payload than the logged-in full report (no internal notes)."""
+        conn = db.get_conn()
+        org = conn.execute("SELECT * FROM organizations WHERE share_token=?", (token,)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "not found"})
+        org_id = org["id"]
+        readiness = score_org(conn, org_id)
+        rows = conn.execute(
+            "SELECT * FROM donor_sustainability_responses WHERE org_id=? OR (org_id IS NULL AND lower(org_name)=lower(?)) "
+            "ORDER BY submitted_at DESC",
+            (org_id, org["name"]),
+        ).fetchall()
+        compliance_rows = conn.execute(
+            "SELECT title, category, due_date, status FROM compliance_items WHERE org_id=? "
+            "ORDER BY (due_date IS NULL), due_date ASC", (org_id,)
+        ).fetchall()
+        conn.close()
+
+        donor = {"hasData": False, "responseCount": 0, "averageScore": None}
+        if rows:
+            scores_present = [r["average_score"] for r in rows if r["average_score"] is not None]
+            donor["hasData"] = True
+            donor["responseCount"] = len(rows)
+            donor["averageScore"] = round(sum(scores_present) / len(scores_present), 1) if scores_present else None
+
+        return json_response(self, 200, {
+            "org": {"name": org["name"]},
+            "readiness": readiness,
+            "donorSustainability": donor,
+            "compliance": [dict(r) for r in compliance_rows],
+        })
 
 def main():
     port = int(os.environ.get("PORT", 8420))
