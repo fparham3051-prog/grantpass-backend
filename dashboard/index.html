@@ -164,7 +164,16 @@
         <p class="hint">Readiness score (financial + manual dimensions) alongside this org's most recent Donor Sustainability &amp; Stewardship Assessment, if they've taken it.</p>
         <div id="fullReportResult"><p class="muted">Loading...</p></div>
 
-        <h3>Financial Data</h3>
+        
+<h3>Share With a Funder</h3>
+<p class="hint">Generate a read-only link a funder can open without a GrantPass login. It shows your readiness score, donor sustainability summary, and compliance calendar &mdash; no internal notes.</p>
+<div id="shareReportBlock">
+<button class="btn btn-ghost btn-sm" id="getShareLinkBtn">Get shareable link</button>
+<div class="status-msg" id="shareLinkStatus"></div>
+<div id="shareLinkResult" style="margin-top:8px;"></div>
+</div>
+
+<h3>Financial Data</h3>
         <p class="hint">Optional, but improves your Financial Health score. Leave blank if you don't have exact numbers yet — you can always come back to this.</p>
         <div class="dropzone" id="finDropzone">
           <div>📄 <strong>Drop a 990, budget, or financial statement here</strong> to auto-fill the fields below — or click to browse</div>
@@ -274,6 +283,18 @@
         <textarea id="reportText" placeholder="Describe what happened this period..." rows="3" style="margin-top:10px;"></textarea>
         <button class="btn btn-ghost btn-sm" id="addReportBtn">Log Update</button>
         <div class="status-msg" id="reportStatus"></div>
+<h3>Compliance Calendar</h3>
+<p class="hint">Filing deadlines, policy reviews, board approval cycles &mdash; one place to see what's due and when. This list is also included on your funder-ready shared report.</p>
+<div id="complianceList" class="muted">Loading...</div>
+<div class="row3" style="margin-top:12px;">
+<div><label>Title</label><input id="compTitle" placeholder="990 filing"></div>
+<div><label>Category</label><input id="compCategory" placeholder="IRS, Governance, HR..."></div>
+<div><label>Due Date</label><input id="compDueDate" type="date"></div>
+</div>
+<input id="compRecurrence" placeholder="Recurrence (optional, e.g. annual)">
+<button class="btn btn-ghost btn-sm" id="addComplianceBtn">Add Item</button>
+<div class="status-msg" id="complianceStatus"></div>
+
       </div>
     </div>
 
@@ -808,6 +829,7 @@ async function selectOrg(id) {
   } catch (e) { /* non-fatal */ }
 
   await loadReports(id);
+await loadCompliance(id);
 }
 
 function collectFinancialsBody() {
@@ -898,6 +920,118 @@ async function loadReports(orgId) {
     el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
   }
 }
+
+
+// ---------- COMPLIANCE CALENDAR ----------
+function complianceStatusInfo(item) {
+if (item.status === 'done') return { label: 'Done', cls: 'green' };
+if (!item.due_date) return { label: 'No date', cls: 'amber' };
+const due = new Date(item.due_date + 'T00:00:00');
+const today = new Date(); today.setHours(0,0,0,0);
+const diffDays = Math.round((due - today) / 86400000);
+if (diffDays < 0) return { label: 'Overdue', cls: 'red' };
+if (diffDays <= 30) return { label: 'Due soon', cls: 'amber' };
+return { label: 'Upcoming', cls: 'green' };
+}
+
+function renderComplianceList(items) {
+if (!items.length) return '<p class="muted">No compliance items yet &mdash; add a filing deadline, policy review, or board approval cycle below.</p>';
+return items.map(item => {
+const info = complianceStatusInfo(item);
+const dueText = item.due_date ? new Date(item.due_date + 'T00:00:00').toLocaleDateString() : 'No due date';
+return '<div class="list-item" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">' +
+'<div><strong style="' + (item.status === 'done' ? 'text-decoration:line-through; color:var(--ink-soft);' : '') + '">' + item.title + '</strong>' +
+' <span class="pill ' + info.cls + '">' + info.label + '</span>' +
+'<div class="meta muted" style="margin-top:2px;">' + (item.category ? item.category + ' &middot; ' : '') + dueText + (item.recurrence ? ' &middot; repeats ' + item.recurrence : '') + '</div></div>' +
+'<div style="display:flex; gap:6px; flex-shrink:0;">' +
+'<button class="btn btn-ghost btn-sm" data-comp-toggle="' + item.id + '" data-comp-status="' + item.status + '">' + (item.status === 'done' ? 'Reopen' : 'Mark done') + '</button>' +
+'<button class="btn btn-ghost btn-sm" data-comp-delete="' + item.id + '">Delete</button>' +
+'</div></div>';
+}).join('');
+}
+
+async function loadCompliance(orgId) {
+const el = document.getElementById('complianceList');
+el.innerHTML = '<p class="muted">Loading...</p>';
+try {
+const data = await api('GET', `/orgs/${orgId}/compliance`);
+const items = data.items || [];
+el.innerHTML = renderComplianceList(items);
+el.querySelectorAll('[data-comp-toggle]').forEach(btn => {
+btn.addEventListener('click', async () => {
+const id = btn.dataset.compToggle;
+const newStatus = btn.dataset.compStatus === 'done' ? 'open' : 'done';
+try {
+await api('PUT', `/compliance/${id}`, { status: newStatus });
+loadCompliance(orgId);
+} catch (e) {
+document.getElementById('complianceStatus').className = 'status-msg error';
+document.getElementById('complianceStatus').textContent = e.message;
+}
+});
+});
+el.querySelectorAll('[data-comp-delete]').forEach(btn => {
+btn.addEventListener('click', async () => {
+if (!confirm('Delete this compliance item?')) return;
+try {
+await api('DELETE', `/compliance/${btn.dataset.compDelete}`);
+loadCompliance(orgId);
+} catch (e) {
+document.getElementById('complianceStatus').className = 'status-msg error';
+document.getElementById('complianceStatus').textContent = e.message;
+}
+});
+});
+} catch (e) {
+el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+}
+}
+
+document.getElementById('addComplianceBtn').addEventListener('click', async () => {
+if (!selectedOrgId) return;
+const title = document.getElementById('compTitle').value.trim();
+const category = document.getElementById('compCategory').value.trim();
+const dueDate = document.getElementById('compDueDate').value;
+const recurrence = document.getElementById('compRecurrence').value.trim();
+const statusEl = document.getElementById('complianceStatus');
+if (!title) { statusEl.className = 'status-msg error'; statusEl.textContent = 'Title is required.'; return; }
+try {
+await api('POST', `/orgs/${selectedOrgId}/compliance`, {
+title, category: category || undefined, dueDate: dueDate || undefined, recurrence: recurrence || undefined,
+});
+statusEl.className = 'status-msg ok';
+statusEl.textContent = 'Added.';
+document.getElementById('compTitle').value = '';
+document.getElementById('compCategory').value = '';
+document.getElementById('compDueDate').value = '';
+document.getElementById('compRecurrence').value = '';
+loadCompliance(selectedOrgId);
+} catch (e) {
+statusEl.className = 'status-msg error';
+statusEl.textContent = e.message;
+}
+});
+
+// ---------- SHARE REPORT LINK ----------
+document.getElementById('getShareLinkBtn').addEventListener('click', async () => {
+if (!selectedOrgId) return;
+const statusEl = document.getElementById('shareLinkStatus');
+const resultEl = document.getElementById('shareLinkResult');
+statusEl.className = 'status-msg';
+statusEl.textContent = 'Generating...';
+try {
+const data = await api('POST', `/orgs/${selectedOrgId}/share`);
+const url = location.origin + '/report.html?token=' + data.shareToken;
+statusEl.className = 'status-msg ok';
+statusEl.textContent = 'Ready to share.';
+resultEl.innerHTML = '<div class="row" style="grid-template-columns:1fr auto; gap:8px; align-items:start;">' +
+'<input readonly value="' + url + '" onclick="this.select()">' +
+'<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(\'' + url + '\').then(()=>{this.textContent=\'Copied\';setTimeout(()=>this.textContent=\'Copy link\',1200)})">Copy link</button></div>';
+} catch (e) {
+statusEl.className = 'status-msg error';
+statusEl.textContent = e.message;
+}
+});
 
 document.getElementById('addReportBtn').addEventListener('click', async () => {
   if (!selectedOrgId) return;
