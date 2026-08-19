@@ -41,8 +41,9 @@
   .panel h2 { margin:0 0 14px; font-size:16px; color:var(--navy); }
   .panel h3 { margin: 18px 0 10px; font-size:13.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
   label { display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:4px; }
-  input, textarea { width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:14px; font-family:inherit; background:white; margin-bottom:12px; color:var(--ink); }
-  input:focus, textarea:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--accent-soft); }
+  input, textarea, select { width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:14px; font-family:inherit; background:white; margin-bottom:12px; color:var(--ink); }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--accent-soft); }
+  select.dim-select { font-size:12.5px; padding:9px 8px; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
   .status-msg { font-size:12.5px; color:var(--ink-soft); margin-top:8px; min-height:16px; }
@@ -181,20 +182,76 @@
           <div><label>Program Revenue ($)</label><input id="finProgram" type="number" placeholder="0"></div>
         </div>
 
-        <h3>Dimension Scores (0-100)</h3>
-        <p class="hint">Not sure what to put? Leave these at 50 (neutral) for now — you can refine them anytime before sharing a score.</p>
+        <h3>Dimension Scores</h3>
+        <p class="hint">Pick the option that best describes where you are today — you can always change it later. Each choice sets the 0-100 score behind the scenes.</p>
         <div class="row3">
-          <div><label>Legal & Compliance</label><input id="dimLegal" type="number" min="0" max="100" value="50"></div>
-          <div><label>Governance</label><input id="dimGovernance" type="number" min="0" max="100" value="50"></div>
-          <div><label>Strategic Clarity</label><input id="dimStrategy" type="number" min="0" max="100" value="50"></div>
+          <div><label>Legal & Compliance</label>
+            <select id="dimLegal" class="dim-select">
+              <option value="20">Not tracked — unsure if filings are current</option>
+              <option value="40">Aware of requirements, but filings or policies are often late or missing</option>
+              <option value="60" selected>Core filings (990, state registration) are current; basic policies exist</option>
+              <option value="80">All filings current, plus key policies (conflict of interest, whistleblower, records)</option>
+              <option value="95">Fully current on all filings; policies reviewed annually with board oversight</option>
+            </select>
+          </div>
+          <div><label>Governance</label>
+            <select id="dimGovernance" class="dim-select">
+              <option value="20">No active board, or board has little real oversight</option>
+              <option value="40">Board exists but is mostly inactive or rarely meets</option>
+              <option value="60" selected>Board meets regularly and reviews finances</option>
+              <option value="80">Board is engaged, has committees, and provides real strategic input</option>
+              <option value="95">Board is highly engaged and diverse, and actively drives strategy and accountability</option>
+            </select>
+          </div>
+          <div><label>Strategic Clarity</label>
+            <select id="dimStrategy" class="dim-select">
+              <option value="20">No written strategic plan or clear direction</option>
+              <option value="40">General sense of mission, but no documented goals or plan</option>
+              <option value="60" selected>Written strategic plan exists, though somewhat outdated</option>
+              <option value="80">Current strategic plan actively guides decisions</option>
+              <option value="95">Strategic plan is current, well-communicated, and drives programs and budgeting</option>
+            </select>
+          </div>
         </div>
         <div class="row3">
-          <div><label>Track Record</label><input id="dimTrackRecord" type="number" min="0" max="100" value="50"></div>
-          <div><label>Outcome Measurement</label><input id="dimOutcomes" type="number" min="0" max="100" value="50"></div>
-          <div><label>Leadership Stability</label><input id="dimLeadership" type="number" min="0" max="100" value="50"></div>
+          <div><label>Track Record</label>
+            <select id="dimTrackRecord" class="dim-select">
+              <option value="20">New organization, or no track record of delivering programs yet</option>
+              <option value="40">Some program history, but limited evidence of consistent delivery</option>
+              <option value="60" selected>Consistent delivery for 1-3 years with some documented results</option>
+              <option value="80">3+ years of consistent delivery with solid documentation of results</option>
+              <option value="95">Long, well-documented track record with a strong reputation among funders/peers</option>
+            </select>
+          </div>
+          <div><label>Outcome Measurement</label>
+            <select id="dimOutcomes" class="dim-select">
+              <option value="20">Only track activities (e.g. events held), not outcomes</option>
+              <option value="40">Track basic outputs (e.g. people served), not real outcomes</option>
+              <option value="60" selected>Track some outcomes informally, but not consistently</option>
+              <option value="80">Systematic outcome tracking tied to program goals</option>
+              <option value="95">Robust outcome measurement with regular external reporting or evaluation</option>
+            </select>
+          </div>
+          <div><label>Leadership Stability</label>
+            <select id="dimLeadership" class="dim-select">
+              <option value="20">No permanent executive leadership currently, or high recent turnover</option>
+              <option value="40">Leadership in place less than a year, or history of frequent turnover</option>
+              <option value="60" selected>Leadership has been stable for 1-3 years</option>
+              <option value="80">Leadership stable for 3+ years, with a succession plan emerging</option>
+              <option value="95">Long-tenured, stable leadership with a documented succession plan</option>
+            </select>
+          </div>
         </div>
         <div class="row3">
-          <div><label>Reporting Capacity</label><input id="dimReporting" type="number" min="0" max="100" value="50"></div>
+          <div><label>Reporting Capacity</label>
+            <select id="dimReporting" class="dim-select">
+              <option value="20">No regular reporting beyond what's legally required</option>
+              <option value="40">Basic financial reports produced, but inconsistently</option>
+              <option value="60" selected>Regular financial and program reports go to board/funders</option>
+              <option value="80">Timely, detailed reporting to board and funders, including outcomes</option>
+              <option value="95">Real-time dashboards or reporting shared proactively with stakeholders</option>
+            </select>
+          </div>
         </div>
 
         <button class="btn btn-primary" id="saveAndScoreBtn">Save & Calculate Score</button>
