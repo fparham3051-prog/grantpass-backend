@@ -151,12 +151,13 @@
         <div class="status-msg" id="createOrgStatus"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="orgListPanel">
         <h2>Your Organizations</h2>
         <div id="orgList"><p class="muted">Loading...</p></div>
       </div>
 
       <div class="panel hidden" id="orgDetailPanel">
+        <button class="btn-link" id="backToOrgsBtn" style="margin-bottom:12px;">&larr; Back to Organizations</button>
         <h2 id="orgDetailName">—</h2>
 
         <h3>Full Report</h3>
@@ -304,6 +305,7 @@
           <div><label>Reporting Capacity</label><input id="wReporting" type="number" value="10"></div>
           <div></div>
         </div>
+        <p class="status-msg" id="weightTotal" style="margin-top:-4px;"></p>
         <button class="btn btn-primary" id="createFunderBtn">Create Funder</button>
         <div class="status-msg" id="createFunderStatus"></div>
       </div>
@@ -732,6 +734,10 @@ async function loadOrgs() {
   }
 }
 
+document.getElementById('backToOrgsBtn').addEventListener('click', () => {
+  document.getElementById('orgListPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
 document.getElementById('createOrgBtn').addEventListener('click', async () => {
   const name = document.getElementById('newOrgName').value.trim();
   const ein = document.getElementById('newOrgEin').value.trim();
@@ -909,6 +915,24 @@ document.getElementById('addReportBtn').addEventListener('click', async () => {
     statusEl.textContent = e.message;
   }
 });
+
+// ---------- WEIGHT TOTAL (live feedback) ----------
+const WEIGHT_IDS = ['wLegal', 'wFinancial', 'wGovernance', 'wStrategy', 'wTrackRecord', 'wOutcomes', 'wLeadership', 'wReporting'];
+function updateWeightTotal() {
+  const el = document.getElementById('weightTotal');
+  if (!el) return;
+  const total = WEIGHT_IDS.reduce((sum, id) => sum + (Number(document.getElementById(id).value) || 0), 0);
+  if (total === 100) {
+    el.className = 'status-msg ok';
+    el.textContent = 'Total: 100 — nice, that adds up perfectly.';
+  } else {
+    el.className = 'status-msg error';
+    const diff = 100 - total;
+    el.textContent = `Total: ${total} — ${diff > 0 ? 'add ' + diff : 'remove ' + Math.abs(diff)} to reach 100.`;
+  }
+}
+WEIGHT_IDS.forEach(id => document.getElementById(id).addEventListener('input', updateWeightTotal));
+updateWeightTotal();
 
 // ---------- FUNDERS ----------
 async function loadFunders() {
