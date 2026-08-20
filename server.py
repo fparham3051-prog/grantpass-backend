@@ -1,6 +1,7 @@
 """
 GrantPass backend — real HTTP API, no framework dependency (pure stdlib
-http.server), so it runs anywhere Python 3 runs with zero installs.
+http.server), so it runs anywhere Python 3 runs with zero installs beyond
+psycopg2-binary (see requirements.txt) for the Postgres connection.
 
 Run:
     python3 server.py
@@ -22,7 +23,6 @@ import scoring
 
 db.init_db()
 
-
 def json_response(handler, status, payload):
     body = json.dumps(payload, default=str).encode()
     handler.send_response(status)
@@ -32,13 +32,11 @@ def json_response(handler, status, payload):
     handler.end_headers()
     handler.wfile.write(body)
 
-
 def get_auth_user(handler):
     header = handler.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         return None
     return auth.verify_token(header[7:])
-
 
 def check_ingest_secret(handler) -> bool:
     """Shared-secret check for the Apps Script -> backend webhook. Separate
@@ -51,11 +49,9 @@ def check_ingest_secret(handler) -> bool:
     provided = handler.headers.get("X-Ingest-Secret", "")
     return hmac_compare(provided, expected)
 
-
 def hmac_compare(a: str, b: str) -> bool:
     import hmac as _hmac
     return _hmac.compare_digest(a or "", b or "")
-
 
 def score_org(conn, org_id: int) -> dict:
     """Shared scoring logic used by /score and /funders/{id}/rank."""
@@ -100,7 +96,6 @@ def score_org(conn, org_id: int) -> dict:
         "dimensionScores": dim_scores,
         "financialSourced": bool(snapshot),
     }
-
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -246,11 +241,11 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 409, {"error": "email already registered"})
         salt, pwd_hash = auth.hash_password(password)
         cur = conn.execute(
-            "INSERT INTO users (email, salt, password_hash, created_at) VALUES (?,?,?,?)",
+            "INSERT INTO users (email, salt, password_hash, created_at) VALUES (?,?,?,?) RETURNING id",
             (email, salt, pwd_hash, db.now()),
         )
+        user_id = cur.fetchone()["id"]
         conn.commit()
-        user_id = cur.lastrowid
         conn.close()
         return json_response(self, 201, {"token": auth.make_token(user_id), "userId": user_id})
 
@@ -275,11 +270,11 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 400, {"error": "name required"})
         conn = db.get_conn()
         cur = conn.execute(
-            "INSERT INTO organizations (user_id, name, ein, description, created_at) VALUES (?,?,?,?,?)",
+            "INSERT INTO organizations (user_id, name, ein, description, created_at) VALUES (?,?,?,?,?) RETURNING id",
             (user_id, data["name"], data.get("ein"), data.get("description"), db.now()),
         )
+        org_id = cur.fetchone()["id"]
         conn.commit()
-        org_id = cur.lastrowid
         conn.close()
         return json_response(self, 201, {"id": org_id, "name": data["name"]})
 
@@ -321,9 +316,9 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 404, {"error": "org not found"})
         conn.execute(
             """INSERT INTO financial_snapshots
-               (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
-                net_assets, contributions_revenue, program_revenue, ingested_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
+             net_assets, contributions_revenue, program_revenue, ingested_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 org_id, "990", parsed.get("tax_year"), parsed.get("total_revenue"), parsed.get("total_expenses"),
                 parsed.get("total_assets"), parsed.get("net_assets"), parsed.get("contributions_revenue"),
@@ -371,9 +366,9 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 404, {"error": "org not found"})
         conn.execute(
             """INSERT INTO financial_snapshots
-               (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
-                net_assets, contributions_revenue, program_revenue, ingested_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
+             net_assets, contributions_revenue, program_revenue, ingested_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 org_id, data.get("source", "bulk"), data.get("fiscal_year"), data.get("total_revenue"),
                 data.get("total_expenses"), data.get("total_assets"), data.get("net_assets"),
@@ -387,7 +382,7 @@ class Handler(BaseHTTPRequestHandler):
     def _set_dimensions(self, org_id):
         """Manual (or future LLM-sourced) scores for the 7 non-financial dimensions.
         Body: {"legal": 80, "governance": 60, "strategy": 70, "trackRecord": 65,
-                "outcomes": 55, "leadership": 75, "reporting": 90}"""
+        "outcomes": 55, "leadership": 75, "reporting": 90}"""
         user_id = get_auth_user(self)
         if not user_id:
             return json_response(self, 401, {"error": "auth required"})
@@ -465,14 +460,14 @@ class Handler(BaseHTTPRequestHandler):
 
         rows = conn.execute(
             """SELECT * FROM donor_sustainability_responses
-               WHERE org_id=? OR (org_id IS NULL AND lower(org_name)=lower(?))
-               ORDER BY submitted_at DESC""",
+            WHERE org_id=? OR (org_id IS NULL AND lower(org_name)=lower(?))
+            ORDER BY submitted_at DESC""",
             (org_id, org["name"]),
         ).fetchall()
         conn.close()
 
         donor = {"hasData": False, "responseCount": 0, "latest": None, "averageScore": None,
-                 "dimensions": [], "history": []}
+                  "dimensions": [], "history": []}
         if rows:
             latest = dict(rows[0])
             scores_present = [r["average_score"] for r in rows if r["average_score"] is not None]
@@ -638,14 +633,14 @@ class Handler(BaseHTTPRequestHandler):
         conn = db.get_conn()
         cur = conn.execute(
             "INSERT INTO funders (user_id, name, focus, grant_range, approach, weights_json, created_at) "
-            "VALUES (?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?) RETURNING id",
             (
                 user_id, data["name"], data.get("focus"), data.get("grantRange"), data.get("approach"),
                 json.dumps(data["weights"]), db.now(),
             ),
         )
+        funder_id = cur.fetchone()["id"]
         conn.commit()
-        funder_id = cur.lastrowid
         conn.close()
         return json_response(self, 201, {"id": funder_id})
 
@@ -741,11 +736,11 @@ class Handler(BaseHTTPRequestHandler):
                 org_id = match["id"]
         cur = conn.execute(
             """INSERT INTO donor_sustainability_responses
-               (org_id, org_name, respondent_role, grassroots_cultivation, stewardship_infrastructure,
-                engagement_cadence, first_gift_follow_through, ownership_clarity, board_readiness,
-                donor_data_maturity, early_warning_capacity, average_score, evidence_json, final_notes,
-                form_response_id, submitted_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (org_id, org_name, respondent_role, grassroots_cultivation, stewardship_infrastructure,
+             engagement_cadence, first_gift_follow_through, ownership_clarity, board_readiness,
+             donor_data_maturity, early_warning_capacity, average_score, evidence_json, final_notes,
+             form_response_id, submitted_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
             (
                 org_id, org_name or None, data.get("respondentRole"),
                 ratings.get("grassrootsCultivation"), ratings.get("stewardshipInfrastructure"),
@@ -756,8 +751,8 @@ class Handler(BaseHTTPRequestHandler):
                 data.get("formResponseId"), data.get("submittedAt") or db.now(),
             ),
         )
+        response_id = cur.fetchone()["id"]
         conn.commit()
-        response_id = cur.lastrowid
         conn.close()
         return json_response(self, 201, {"saved": True, "id": response_id, "orgId": org_id, "averageScore": avg_score})
 
@@ -795,8 +790,6 @@ class Handler(BaseHTTPRequestHandler):
             out.append(d)
         return json_response(self, 200, {"responses": out})
 
-
-
     # ---------- compliance calendar ----------
     def _list_compliance(self, org_id):
         user_id = get_auth_user(self)
@@ -829,12 +822,12 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 404, {"error": "org not found"})
         cur = conn.execute(
             "INSERT INTO compliance_items (org_id, title, category, due_date, status, recurrence, notes, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?) RETURNING id",
             (org_id, data["title"], data.get("category"), data.get("dueDate"), "open",
              data.get("recurrence"), data.get("notes"), db.now()),
         )
+        item_id = cur.fetchone()["id"]
         conn.commit()
-        item_id = cur.lastrowid
         conn.close()
         return json_response(self, 201, {"id": item_id})
 
@@ -949,9 +942,8 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     port = int(os.environ.get("PORT", 8420))
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    print(f"GrantPass backend listening on http://0.0.0.0:{port}  (db: {db.DB_PATH})")
+    print(f"GrantPass backend listening on http://0.0.0.0:{port} (db: {db.DB_KIND})")
     server.serve_forever()
-
 
 if __name__ == "__main__":
     main()
