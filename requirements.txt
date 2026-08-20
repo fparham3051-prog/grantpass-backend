@@ -1,8 +1,5 @@
-# No external dependencies — this backend runs on Python 3.10+ standard
-# library alone (http.server, sqlite3, hashlib/hmac, xml.etree). Nothing to
-# install, nothing to patch for supply-chain vulnerabilities.
-#
-# Optional, for later:
-#   requests          # nicer HTTP client than urllib for fetch_990.py
-#   gunicorn + flask  # if you outgrow the stdlib server under real load
-#   psycopg2-binary   # if you move from SQLite to Postgres for multi-instance deploys
+# Moved from SQLite to Postgres (Neon) so data survives Render free-tier
+# deploys/restarts, which wipe any on-disk SQLite file. Everything else is
+# still stdlib (http.server, hashlib/hmac, xml.etree) - nothing else to
+# patch for supply-chain vulnerabilities.
+psycopg2-binary
