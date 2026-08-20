@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GrantPass Funder Report</title>
+<style>
+:root {
+color-scheme: light;
+--navy: #11233D; --navy-deep: #0B1A2D;
+--gold: #B28E42; --gold-light: #CBA869; --gold-access: #8E7134;
+--charcoal: #23282D; --muted-1: #55606B; --muted-2: #4A545E;
+--border-gray: #E2E6EA;
+--bg: #FFFFFF; --bg-soft: #F3F5F7; --ink: var(--charcoal); --ink-soft: var(--muted-1);
+--line: var(--border-gray); --accent: var(--gold); --accent-dark: var(--gold-access); --accent-soft: #F3ECDC;
+--red: #C22F2F; --red-bg: #FBEAEA; --amber: var(--gold-access); --amber-bg: #F3ECDC;
+--green: #1E7A4C; --green-bg: #E4F3EC;
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif; }
+.wrap { max-width: 800px; margin: 0 auto; padding: 0 24px 40px; }
+header { display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg,var(--navy),var(--navy-deep)); padding:18px 24px; margin:0 -24px 24px; border-radius:0 0 14px 14px; }
+.logo { font-weight:800; font-size:19px; color:#fff; }
+.logo span { color:var(--gold-light); }
+.panel { background:var(--bg-soft); border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:18px; }
+.panel h2 { margin:0 0 14px; font-size:16px; color:var(--navy); }
+.panel h3 { margin: 18px 0 10px; font-size:13.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
+.muted { color:var(--ink-soft); font-size:12.5px; }
+.hint { font-size:12px; color:var(--ink-soft); margin:-6px 0 12px; line-height:1.5; }
+.status-msg { font-size:12.5px; color:var(--ink-soft); }
+.status-msg.error { color:var(--red); }
+.pill { display:inline-block; font-size:11px; font-weight:800; padding:3px 10px; border-radius:999px; margin-left:8px; }
+.pill.green { background:var(--green-bg); color:var(--green); }
+.pill.amber { background:var(--amber-bg); color:var(--amber); }
+.pill.red { background:var(--red-bg); color:var(--red); }
+.dim-row { display:grid; grid-template-columns:170px 1fr 40px; align-items:center; gap:10px; font-size:13px; margin-bottom:6px; }
+.bar-track { background:#EDEFEC; border-radius:999px; height:8px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:999px; }
+.score-hero { display:flex; align-items:center; gap:20px; padding:18px 20px; border-radius:14px; margin-bottom:16px; }
+.score-num { font-size:40px; font-weight:800; }
+.list-item { border-bottom:1px solid var(--line); padding:10px 0; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.list-item:last-child { border-bottom:none; }
+.meta { margin-top:2px; }
+.badge { display:inline-block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; background:var(--navy); color:#fff; padding:3px 10px; border-radius:999px; margin-bottom:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div class="logo">GrantPass <span>Console</span></div></header>
+<div class="badge">Funder-Ready Report</div>
+<div id="content"><p class="muted">Loading...</p></div>
+</div>
+<script>
+const API_BASE = 'https://grantpass-backend.onrender.com';
+
+function levelColor(level) {
+return level === 'green' ? getComputedStyle(document.documentElement).getPropertyValue('--green')
+: level === 'yellow' ? getComputedStyle(document.documentElement).getPropertyValue('--amber')
+: getComputedStyle(document.documentElement).getPropertyValue('--red');
+}
+function levelFromScore(s) { return s >= 75 ? 'green' : s >= 55 ? 'yellow' : 'red'; }
+
+function renderScoreCard(data) {
+const level = levelFromScore(data.overall);
+let html = '<div class="score-hero" style="background:' + (level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)') + '">' +
+'<div class="score-num" style="color:' + levelColor(level) + '">' + Math.round(data.overall) + '</div>' +
+'<div><strong>' + data.status + '</strong><br><span class="muted">Weighted overall readiness score</span></div></div>';
+(data.dimensions || []).forEach(d => {
+html += '<div class="dim-row"><div>' + d.name + '</div>' +
+'<div class="bar-track"><div class="bar-fill" style="width:' + d.score + '%;background:' + levelColor(d.level) + '"></div></div>' +
+'<div style="text-align:right;font-weight:700;">' + Math.round(d.score) + '</div></div>';
+});
+return html;
+}
+
+function renderDonor(donor) {
+if (!donor || !donor.hasData) {
+return '<p class="muted">No Donor Sustainability &amp; Stewardship Assessment on file yet.</p>';
+}
+const level = levelFromScore(donor.averageScore);
+return '<div class="score-hero" style="background:' + (level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)') + '">' +
+'<div class="score-num" style="color:' + levelColor(level) + '">' + Math.round(donor.averageScore) + '</div>' +
+'<div><strong>Donor Sustainability</strong><br><span class="muted">' + donor.responseCount + ' response' + (donor.responseCount === 1 ? '' : 's') + '</span></div></div>';
+}
+
+function complianceStatusInfo(item) {
+if (item.status === 'done') return { label: 'Done', cls: 'green' };
+if (!item.due_date) return { label: 'No date', cls: 'amber' };
+const due = new Date(item.due_date + 'T00:00:00');
+const today = new Date(); today.setHours(0,0,0,0);
+const diffDays = Math.round((due - today) / 86400000);
+if (diffDays < 0) return { label: 'Overdue', cls: 'red' };
+if (diffDays <= 30) return { label: 'Due soon', cls: 'amber' };
+return { label: 'Upcoming', cls: 'green' };
+}
+
+function renderCompliance(items) {
+if (!items || !items.length) return '<p class="muted">No compliance items on file.</p>';
+return items.map(item => {
+const info = complianceStatusInfo(item);
+const dueText = item.due_date ? new Date(item.due_date + 'T00:00:00').toLocaleDateString() : 'No due date';
+return '<div class="list-item"><div><strong style="' + (item.status === 'done' ? 'text-decoration:line-through; color:var(--ink-soft);' : '') + '">' + item.title + '</strong>' +
+' <span class="pill ' + info.cls + '">' + info.label + '</span>' +
+'<div class="meta muted">' + (item.category ? item.category + ' &middot; ' : '') + dueText + '</div></div></div>';
+}).join('');
+}
+
+async function load() {
+const el = document.getElementById('content');
+const params = new URLSearchParams(location.search);
+const token = params.get('token');
+if (!token) { el.innerHTML = '<p class="status-msg error">Missing report link token.</p>'; return; }
+try {
+const res = await fetch(API_BASE + '/public/report/' + encodeURIComponent(token));
+const data = await res.json();
+if (!res.ok) throw new Error(data.error || 'Could not load this report.');
+el.innerHTML =
+'<div class="panel"><h2>' + data.org.name + '</h2>' +
+'<h3>Readiness</h3>' + renderScoreCard(data.readiness) +
+'<h3>Donor Sustainability</h3>' + renderDonor(data.donorSustainability) +
+'<h3>Compliance Calendar</h3>' + renderCompliance(data.compliance) +
+'</div>';
+} catch (e) {
+el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+}
+}
+load();
+</script>
+</body>
+</html>
