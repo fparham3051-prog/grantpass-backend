@@ -1,19 +1,38 @@
 """
-SQLite persistence layer. Real, on-disk, relational - not localStorage.
+Postgres persistence layer (Neon). Real, hosted, relational - not
+localStorage, not local SQLite (Render's free web-service tier has no
+persistent disk, so an on-disk SQLite file gets wiped on every deploy and
+likely every idle spin-down; Neon's free Postgres tier survives both).
 
 Schema mirrors the data model from the GrantPass spec: Organization,
 FinancialSnapshot (from ingested 990 data), ReadinessScore, Funder,
 ReportEntry (the continuous-reporting history).
+
+server.py's ~40 query call sites were written against sqlite3's API:
+conn.execute(sql, params) returning a cursor you fetchone()/fetchall() on
+directly, with dict-like Row access (row["col"], dict(row)). Rather than
+rewrite every call site for psycopg2's different API, PGConnection below
+presents that same sqlite3-shaped surface backed by psycopg2 - so almost
+none of server.py needed to change. The one real behavioral gap is
+cursor.lastrowid, which Postgres doesn't have; the handful of INSERT call
+sites that used it were updated to add RETURNING id and read
+cur.fetchone()["id"] instead - see server.py's _register, _create_org,
+_create_compliance, _create_funder, _ingest_donor_sustainability.
+
+Requires DATABASE_URL to be set (a full postgres:// connection string).
 """
-import sqlite3
 import os
 import datetime
 
-DB_PATH = os.environ.get("GRANTPASS_DB", os.path.join(os.path.dirname(__file__), "grantpass.db"))
+import psycopg2
+import psycopg2.extras
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+DB_KIND = "postgres"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     salt TEXT NOT NULL,
     password_hash TEXT NOT NULL,
@@ -21,16 +40,17 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS organizations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
     name TEXT NOT NULL,
     ein TEXT,
     description TEXT,
+    share_token TEXT,
     created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS financial_snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     org_id INTEGER NOT NULL REFERENCES organizations(id),
     source TEXT NOT NULL,
     fiscal_year TEXT,
@@ -45,7 +65,7 @@ CREATE TABLE IF NOT EXISTS financial_snapshots (
 
 -- Append-only history of computed overall scores (for trend/audit purposes).
 CREATE TABLE IF NOT EXISTS readiness_scores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     org_id INTEGER NOT NULL REFERENCES organizations(id),
     overall REAL,
     status TEXT,
@@ -64,7 +84,7 @@ CREATE TABLE IF NOT EXISTS manual_dimensions (
 );
 
 CREATE TABLE IF NOT EXISTS funders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id),
     name TEXT NOT NULL,
     focus TEXT,
@@ -75,7 +95,7 @@ CREATE TABLE IF NOT EXISTS funders (
 );
 
 CREATE TABLE IF NOT EXISTS report_entries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     org_id INTEGER NOT NULL REFERENCES organizations(id),
     update_text TEXT NOT NULL,
     overall_before REAL,
@@ -88,15 +108,15 @@ CREATE TABLE IF NOT EXISTS report_entries (
 -- readiness score at the time the outcome is logged. This is the ground-truth
 -- capture that lets the rubric eventually be validated or corrected against
 -- actual funder decisions, instead of only ever scoring against itself. It's
--- also the first piece of genuinely proprietary data this system produces —
+-- also the first piece of genuinely proprietary data this system produces -
 -- nothing here is derivable from public 990 data.
 CREATE TABLE IF NOT EXISTS outcomes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     org_id INTEGER NOT NULL REFERENCES organizations(id),
     funder_name TEXT NOT NULL,
-    result TEXT NOT NULL,           -- 'funded' | 'declined' | 'pending'
+    result TEXT NOT NULL,
     amount REAL,
-    score_at_time REAL,             -- overall readiness score when this was logged, if known
+    score_at_time REAL,
     notes TEXT,
     logged_at TEXT NOT NULL
 );
@@ -106,12 +126,12 @@ CREATE TABLE IF NOT EXISTS outcomes (
 -- trigger. Deliberately NOT foreign-keyed to organizations(id): the form
 -- captures org_name as free text from whoever fills it out, so there's no
 -- guaranteed match to an authenticated user's org record at ingest time.
--- This is a second, complementary rubric (donor retention/stewardship) —
+-- This is a second, complementary rubric (donor retention/stewardship) -
 -- not a straight substitute for one of the 7 manual_dimensions keys - so it
 -- gets its own table rather than being folded into manual_dimensions.
 -- org_id stays nullable for a later manual/fuzzy-match linking step.
 CREATE TABLE IF NOT EXISTS donor_sustainability_responses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     org_id INTEGER REFERENCES organizations(id),
     org_name TEXT,
     respondent_role TEXT,
@@ -136,7 +156,7 @@ CREATE TABLE IF NOT EXISTS donor_sustainability_responses (
 -- score -- the thing Salesforce/Asana-style stacks don't give nonprofits:
 -- one place to see what's due, when.
 CREATE TABLE IF NOT EXISTS compliance_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     org_id INTEGER NOT NULL REFERENCES organizations(id),
     title TEXT NOT NULL,
     category TEXT,
@@ -147,27 +167,74 @@ CREATE TABLE IF NOT EXISTS compliance_items (
     completed_at TEXT,
     created_at TEXT NOT NULL
 );
-
 """
 
 
+def _translate(sql):
+    """server.py's call sites are written against sqlite3's '?' placeholder
+    style. None of the queries embed a literal '?' character outside of
+    placeholders, so a straight replace to psycopg2's '%s' style is safe."""
+    return sql.replace("?", "%s")
+
+
+class _Cursor:
+    """Wraps a psycopg2 RealDictCursor so callers can keep doing
+    cur.fetchone()/cur.fetchall() and get dict-like rows (row["col"],
+    dict(row), "key" in row) exactly like sqlite3.Row gave them."""
+
+    def __init__(self, cur):
+        self._cur = cur
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    @property
+    def lastrowid(self):
+        # Postgres cursors have no lastrowid - call sites that need the
+        # new row's id use "... RETURNING id" in the INSERT and read it
+        # via fetchone()["id"] instead. If this raises, a call site was
+        # missed during the SQLite -> Postgres migration.
+        raise AttributeError(
+            "Postgres cursors have no lastrowid - use RETURNING id + fetchone() instead"
+        )
+
+
+class PGConnection:
+    """Thin sqlite3.Connection-shaped wrapper around a psycopg2 connection,
+    so the query call sites throughout server.py didn't need a rewrite when
+    the storage engine moved from SQLite to Postgres."""
+
+    def __init__(self, pg_conn):
+        self._conn = pg_conn
+
+    def execute(self, sql, params=()):
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(_translate(sql), params)
+        return _Cursor(cur)
+
+    def executescript(self, sql):
+        cur = self._conn.cursor()
+        cur.execute(sql)
+        cur.close()
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    pg_conn = psycopg2.connect(DATABASE_URL)
+    return PGConnection(pg_conn)
 
 
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA)
-    # Lightweight migration for columns added after initial deploy - SQLite
-    # has no "ADD COLUMN IF NOT EXISTS", so just try and swallow the
-    # duplicate-column error on databases that already have it.
-    try:
-        conn.execute("ALTER TABLE organizations ADD COLUMN share_token TEXT")
-    except sqlite3.OperationalError:
-        pass
     conn.commit()
     conn.close()
 
