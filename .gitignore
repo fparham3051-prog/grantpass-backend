@@ -6,3 +6,6 @@ __pycache__/
 # Neon CLI / local secrets
 .env
 .env.*
+.neon
+.apply_stage_patches.py.done
+node_modules/

@@ -55,10 +55,15 @@ def hmac_compare(a: str, b: str) -> bool:
     return _hmac.compare_digest(a or "", b or "")
 
 def score_org(conn, org_id: int) -> dict:
-    """Shared scoring logic used by /score and /funders/{id}/rank."""
+    """Shared scoring logic used by /score and /funders/{id}/rank. Scores
+    against the org's own lifecycle stage (BUILD/FUND/SUSTAIN, see
+    scoring.STAGE_WEIGHTS) - orgs created before the stage column existed
+    read back stage=None, which falls back to FUND, the same default the
+    old single-stage rubric always used."""
     org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
     if not org:
         return None
+    stage = org["stage"] if org["stage"] in scoring.STAGE_WEIGHTS else scoring.DEFAULT_STAGE
     snapshot = conn.execute(
         "SELECT * FROM financial_snapshots WHERE org_id=? ORDER BY ingested_at DESC LIMIT 1", (org_id,)
     ).fetchone()
@@ -77,7 +82,7 @@ def score_org(conn, org_id: int) -> dict:
 
     dims = []
     dim_scores = {"financial": fin_score}
-    for d in scoring.RUBRIC:
+    for d in scoring.rubric_for(stage):
         if d["key"] == "financial":
             sc, note = fin_score, fin_note
         elif d["key"] in manual_dims:
@@ -85,14 +90,21 @@ def score_org(conn, org_id: int) -> dict:
         else:
             sc, note = 50, "No data yet for this dimension — neutral default."
         dim_scores[d["key"]] = sc
-        dims.append({"name": d["name"], "weight": d["weight"], "score": sc, "level": scoring.level_for(sc), "note": note})
+        dims.append({
+            "name": d["name"], "weight": d["weight"], "score": sc,
+            "level": scoring.level_for(sc), "note": note,
+            "liftTarget": scoring.lift_target(sc),
+        })
 
-    overall = scoring.compute_overall(dim_scores)
+    overall = scoring.compute_overall(dim_scores, stage)
     return {
         "orgId": org_id,
         "orgName": org["name"],
+        "stage": stage,
         "overall": overall,
         "status": scoring.status_for(overall),
+        "decisionBand": scoring.decision_band_for(overall),
+        "hardGate": scoring.hard_gate_check(dim_scores, stage),
         "dimensions": dims,
         "dimensionScores": dim_scores,
         "financialSourced": bool(snapshot),
@@ -151,6 +163,10 @@ class Handler(BaseHTTPRequestHandler):
             m = re.match(r"^/orgs/(\d+)$", path)
             if m and method == "GET":
                 return self._get_org(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/stage$", path)
+            if m and method == "POST":
+                return self._set_org_stage(int(m.group(1)))
 
             m = re.match(r"^/orgs/(\d+)/ingest-990$", path)
             if m and method == "POST":
@@ -274,15 +290,18 @@ class Handler(BaseHTTPRequestHandler):
         data = self._read_json()
         if not data.get("name"):
             return json_response(self, 400, {"error": "name required"})
+        stage = (data.get("stage") or scoring.DEFAULT_STAGE).strip().upper()
+        if stage not in scoring.STAGE_WEIGHTS:
+            stage = scoring.DEFAULT_STAGE
         conn = db.get_conn()
         cur = conn.execute(
-            "INSERT INTO organizations (user_id, name, ein, description, created_at) VALUES (?,?,?,?,?) RETURNING id",
-            (user_id, data["name"], data.get("ein"), data.get("description"), db.now()),
+            "INSERT INTO organizations (user_id, name, ein, description, stage, created_at) VALUES (?,?,?,?,?,?) RETURNING id",
+            (user_id, data["name"], data.get("ein"), data.get("description"), stage, db.now()),
         )
         org_id = cur.fetchone()["id"]
         conn.commit()
         conn.close()
-        return json_response(self, 201, {"id": org_id, "name": data["name"]})
+        return json_response(self, 201, {"id": org_id, "name": data["name"], "stage": stage})
 
     def _list_orgs(self):
         user_id = get_auth_user(self)
@@ -290,7 +309,7 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 401, {"error": "auth required"})
         conn = db.get_conn()
         rows = conn.execute(
-            "SELECT id, name, ein, description, created_at FROM organizations WHERE user_id=?", (user_id,)
+            "SELECT id, name, ein, description, stage, created_at FROM organizations WHERE user_id=?", (user_id,)
         ).fetchall()
         conn.close()
         return json_response(self, 200, {"organizations": [dict(r) for r in rows]})
@@ -305,6 +324,29 @@ class Handler(BaseHTTPRequestHandler):
         if not row:
             return json_response(self, 404, {"error": "not found"})
         return json_response(self, 200, dict(row))
+
+    def _set_org_stage(self, org_id):
+        """Body: {"stage": "BUILD"|"FUND"|"SUSTAIN"}. Orgs move through the
+        lifecycle over time, so changing stage is a separate, deliberately
+        small endpoint from org creation - existing financial data and
+        manual dimension inputs carry over unchanged; only which rubric
+        weights/hard gates they're scored against changes."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        stage = (data.get("stage") or "").strip().upper()
+        if stage not in scoring.STAGE_WEIGHTS:
+            return json_response(self, 400, {"error": f"stage must be one of {sorted(scoring.STAGE_WEIGHTS)}"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute("UPDATE organizations SET stage=? WHERE id=?", (stage, org_id))
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"id": org_id, "stage": stage})
 
     def _ingest_990(self, org_id):
         user_id = get_auth_user(self)
@@ -418,8 +460,8 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 404, {"error": "org not found"})
         result = score_org(conn, org_id)
         conn.execute(
-            "INSERT INTO readiness_scores (org_id, overall, status, dimensions_json, computed_at) VALUES (?,?,?,?,?)",
-            (org_id, result["overall"], result["status"], json.dumps({"dimensions": result["dimensions"]}), db.now()),
+            "INSERT INTO readiness_scores (org_id, overall, status, dimensions_json, stage, computed_at) VALUES (?,?,?,?,?,?)",
+            (org_id, result["overall"], result["status"], json.dumps({"dimensions": result["dimensions"]}), result["stage"], db.now()),
         )
         conn.commit()
         conn.close()

@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     ein TEXT,
     description TEXT,
     share_token TEXT,
+    stage TEXT DEFAULT 'FUND',
     created_at TEXT NOT NULL
 );
 
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS readiness_scores (
     overall REAL,
     status TEXT,
     dimensions_json TEXT,
+    stage TEXT DEFAULT 'FUND',
     computed_at TEXT NOT NULL
 );
 
@@ -253,6 +255,8 @@ def init_db():
     # migration dance is needed here the way SQLite would have required -
     # this is a no-op once the column exists.
     conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
+    conn.executescript("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
+    conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.commit()
     conn.close()
 
