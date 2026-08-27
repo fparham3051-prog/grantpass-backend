@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 import auth
 import db
+import demo_scoring
 import parsing
 import scoring
 
@@ -200,6 +201,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/donor-sustainability" and method == "GET":
                 return self._list_donor_sustainability()
 
+            if path == "/demo/score" and method == "POST":
+                return self._demo_score()
+            if path == "/demo/benchmarks" and method == "GET":
+                return self._demo_benchmarks()
+
             m = re.match(r"^/funders/(\d+)/rank$", path)
             if m and method == "GET":
                 return self._rank_for_funder(int(m.group(1)))
@@ -380,9 +386,9 @@ class Handler(BaseHTTPRequestHandler):
         return json_response(self, 200, {"saved": data})
 
     def _set_dimensions(self, org_id):
-        """Manual (or future LLM-sourced) scores for the 7 non-financial dimensions.
-        Body: {"legal": 80, "governance": 60, "strategy": 70, "trackRecord": 65,
-        "outcomes": 55, "leadership": 75, "reporting": 90}"""
+        """Manual (or future LLM-sourced) scores for the 6 non-financial FUND
+        dimensions. Body: {"strategy": 70, "program": 55, "leadership": 75,
+        "operations": 90, "partnerships": 60, "governance": 80}"""
         user_id = get_auth_user(self)
         if not user_id:
             return json_response(self, 401, {"error": "auth required"})
@@ -789,6 +795,72 @@ class Handler(BaseHTTPRequestHandler):
                 d["evidence"] = {}
             out.append(d)
         return json_response(self, 200, {"responses": out})
+
+    # ---------- public demo (no auth, no account required) ----------
+    def _demo_score(self):
+        """Powers the marketing site's "paste your org, get scored" live
+        demo. Deliberately outside auth/org creation - a visitor gets a
+        real scorecard with zero setup, same 7-dimension FUND rubric used
+        everywhere else in the system (see demo_scoring.py for how a
+        paragraph becomes dimension scores)."""
+        data = self._read_json()
+        description = (data.get("description") or "").strip()
+        stage = (data.get("stage") or scoring.DEFAULT_STAGE).strip().upper()
+        if stage not in scoring.STAGE_WEIGHTS:
+            stage = scoring.DEFAULT_STAGE
+        if len(description) < demo_scoring.MIN_CHARS:
+            return json_response(
+                self, 400,
+                {"error": f"description must be at least {demo_scoring.MIN_CHARS} characters"},
+            )
+        description = description[: demo_scoring.MAX_CHARS]
+        result = demo_scoring.score_description(description, stage)
+        conn = db.get_conn()
+        conn.execute(
+            "INSERT INTO demo_score_log (overall, dimensions_json, method, stage, created_at) VALUES (?,?,?,?,?)",
+            (result["overall"], json.dumps(result["dimensions"]), result["method"], stage, db.now()),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, result)
+
+    def _demo_benchmarks(self):
+        """Aggregate-only readout of every /demo/score call so far - no
+        text, no per-visitor data, just counts and averages. Optional
+        ?stage=BUILD|FUND|SUSTAIN filters to one lifecycle stage; omitted
+        or unrecognized falls back to all stages combined."""
+        query = urlparse(self.path).query
+        stage_filter = None
+        for part in query.split("&"):
+            if part.startswith("stage="):
+                from urllib.parse import unquote_plus
+                candidate = unquote_plus(part[6:]).strip().upper()
+                if candidate in scoring.STAGE_WEIGHTS:
+                    stage_filter = candidate
+        conn = db.get_conn()
+        if stage_filter:
+            rows = conn.execute(
+                "SELECT overall, dimensions_json FROM demo_score_log WHERE stage=?", (stage_filter,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT overall, dimensions_json FROM demo_score_log").fetchall()
+        conn.close()
+        if not rows:
+            return json_response(self, 200, {"count": 0, "averageOverall": None, "dimensionAverages": {}})
+        count = len(rows)
+        overalls = [r["overall"] for r in rows if r["overall"] is not None]
+        avg_overall = round(sum(overalls) / len(overalls), 1) if overalls else None
+        sums, counts = {}, {}
+        for r in rows:
+            try:
+                dims = json.loads(r["dimensions_json"])
+            except Exception:
+                continue
+            for d in dims:
+                sums[d["key"]] = sums.get(d["key"], 0) + d["score"]
+                counts[d["key"]] = counts.get(d["key"], 0) + 1
+        dim_avgs = {k: round(sums[k] / counts[k], 1) for k in sums}
+        return json_response(self, 200, {"count": count, "averageOverall": avg_overall, "dimensionAverages": dim_avgs})
 
     # ---------- compliance calendar ----------
     def _list_compliance(self, org_id):

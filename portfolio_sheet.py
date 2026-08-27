@@ -1,5 +1,5 @@
 """
-Shared Portfolio Scorecard sheet builder — used by both build_workbook.py
+Shared Portfolio Scorecard sheet builder — used by both build_template.py
 (the blank template with example rows) and export_to_excel.py (live data
 pulled from a running backend). Kept in one place so the two can't drift:
 the layout, formulas, and formatting are defined once here.
@@ -10,8 +10,8 @@ Each row in `org_rows` is a dict:
         "total_revenue": float|None, "total_expenses": float|None,
         "total_assets": float|None, "net_assets": float|None,
         "contributions_revenue": float|None, "program_revenue": float|None,
-        "legal": int, "governance": int, "strategy": int, "trackRecord": int,
-        "outcomes": int, "leadership": int, "reporting": int,
+        "strategy": int, "program": int, "leadership": int, "operations": int,
+        "partnerships": int, "governance": int,
         "note": str (optional),
     }
 Financial fields may be None (org has no ingested snapshot yet) - written
@@ -53,23 +53,27 @@ COLUMNS = [
     ("Program Revenue ($)", "$#,##0", "raw"),
     ("Reserve Months", "0.0", "calc"),
     ("Revenue Concentration", "0.0%", "calc"),
-    ("Financial Health (0-100)", "0", "calc"),
-    ("Legal & Compliance (0-100)", "0", "manual"),
-    ("Governance (0-100)", "0", "manual"),
-    ("Strategic Clarity (0-100)", "0", "manual"),
-    ("Track Record (0-100)", "0", "manual"),
-    ("Outcome Measurement (0-100)", "0", "manual"),
-    ("Leadership Stability (0-100)", "0", "manual"),
-    ("Reporting Capacity (0-100)", "0", "manual"),
+    ("Revenue and Financial Health (0-100)", "0", "calc"),
+    ("Strategy and Positioning (0-100)", "0", "manual"),
+    ("Program and Impact Evidence (0-100)", "0", "manual"),
+    ("Leadership and Org. Capacity (0-100)", "0", "manual"),
+    ("Operations and Infrastructure (0-100)", "0", "manual"),
+    ("Partnerships and Ecosystem (0-100)", "0", "manual"),
+    ("Governance and Risk (0-100)", "0", "manual"),
     ("Overall Score", "0.0", "result"),
     ("Status", None, "result"),
 ]
 
-MANUAL_KEYS = ["legal", "governance", "strategy", "trackRecord", "outcomes", "leadership", "reporting"]
+MANUAL_KEYS = ["strategy", "program", "leadership", "operations", "partnerships", "governance"]
+MANUAL_COLUMN_NAMES = [
+    "Strategy and Positioning (0-100)", "Program and Impact Evidence (0-100)",
+    "Leadership and Org. Capacity (0-100)", "Operations and Infrastructure (0-100)",
+    "Partnerships and Ecosystem (0-100)", "Governance and Risk (0-100)",
+]
 GROUP_ROW = 4
 HEADER_ROW = 5
 DATA_START = HEADER_ROW + 1
-NOTE_COL = 21  # column U, one past Status
+NOTE_COL = len(COLUMNS) + 1  # one past Status
 
 
 def _financial_health_formula(col, r):
@@ -100,19 +104,22 @@ def _write_formula_row(ws, col, r):
     ws[f"{col['Revenue Concentration']}{r}"] = f"=IF({rev_c}=0,0,MAX({contrib_c},{prog_c})/{rev_c})"
     ws[f"{col['Revenue Concentration']}{r}"].font = BLACK
 
-    fin_cell = f"{col['Financial Health (0-100)']}{r}"
+    fin_cell = f"{col['Revenue and Financial Health (0-100)']}{r}"
     ws[fin_cell] = _financial_health_formula(col, r)
     ws[fin_cell].font = BLACK
 
-    legal_c, gov_c, strat_c, track_c, out_c, lead_c, rep_c = (
-        f"{col['Legal & Compliance (0-100)']}{r}", f"{col['Governance (0-100)']}{r}",
-        f"{col['Strategic Clarity (0-100)']}{r}", f"{col['Track Record (0-100)']}{r}",
-        f"{col['Outcome Measurement (0-100)']}{r}", f"{col['Leadership Stability (0-100)']}{r}",
-        f"{col['Reporting Capacity (0-100)']}{r}",
+    strat_c, prog2_c, lead_c, ops_c, part_c, gov_c = (
+        f"{col['Strategy and Positioning (0-100)']}{r}", f"{col['Program and Impact Evidence (0-100)']}{r}",
+        f"{col['Leadership and Org. Capacity (0-100)']}{r}", f"{col['Operations and Infrastructure (0-100)']}{r}",
+        f"{col['Partnerships and Ecosystem (0-100)']}{r}", f"{col['Governance and Risk (0-100)']}{r}",
     )
+    # Weights mirror scoring.STAGE_WEIGHTS["FUND"] exactly - the portfolio
+    # export stays FUND-only, matching the authenticated /orgs flow (which
+    # is also FUND-only for now; BUILD/SUSTAIN are only live on the public
+    # /demo/score endpoint).
     overall_cell = f"{col['Overall Score']}{r}"
-    ws[overall_cell] = (f"=ROUND(({legal_c}*15+{fin_cell}*20+{gov_c}*10+{strat_c}*10+{track_c}*15"
-                        f"+{out_c}*15+{lead_c}*5+{rep_c}*10)/100,1)")
+    ws[overall_cell] = (f"=ROUND(({strat_c}*10+{fin_cell}*20+{prog2_c}*20+{lead_c}*10"
+                        f"+{ops_c}*15+{part_c}*10+{gov_c}*15)/100,1)")
     ws[overall_cell].font = Font(name=FONT, bold=True)
 
     status_cell = f"{col['Status']}{r}"
@@ -132,10 +139,10 @@ def add_portfolio_scorecard_sheet(wb, org_rows, sheet_name="Portfolio Scorecard"
     ws.sheet_view.showGridLines = False
     ws.freeze_panes = "A6"
 
-    ws["A1"] = "Portfolio Scorecard — full 8-dimension readiness rubric, multiple organizations"
+    ws["A1"] = "Portfolio Scorecard — full 7-dimension FUND readiness rubric, multiple organizations"
     ws["A1"].font = TITLE_FONT
     ws["A2"] = subtitle or (
-        "Blue cells are raw inputs. Green cells are manual scores (0-100) for the 7 qualitative "
+        "Blue cells are raw inputs. Green cells are manual scores (0-100) for the 6 qualitative "
         "dimensions. Gray and gold cells are formulas that recalculate automatically."
     )
     ws["A2"].font = SUBTLE
@@ -157,8 +164,8 @@ def add_portfolio_scorecard_sheet(wb, org_rows, sheet_name="Portfolio Scorecard"
         (1, 2, "Organization", GROUP_FILL_RAW),
         (3, 8, "Raw Financials — input", GROUP_FILL_RAW),
         (9, 11, "Financial Calc — auto", GROUP_FILL_CALC),
-        (12, 18, "Manual Dimension Scores (0-100) — input", GROUP_FILL_MANUAL),
-        (19, 20, "Result", GROUP_FILL_RESULT),
+        (12, 17, "Manual Dimension Scores (0-100) — input", GROUP_FILL_MANUAL),
+        (18, 19, "Result", GROUP_FILL_RESULT),
     ]
     for start, end, label, fill in group_bands:
         ws.merge_cells(start_row=GROUP_ROW, start_column=start, end_row=GROUP_ROW, end_column=end)
@@ -181,11 +188,7 @@ def add_portfolio_scorecard_sheet(wb, org_rows, sheet_name="Portfolio Scorecard"
             val = row.get(key)
             ws[f"{col[name]}{r}"] = val if val is not None else 0
             ws[f"{col[name]}{r}"].font = BLUE
-        for key, name in zip(MANUAL_KEYS, [
-            "Legal & Compliance (0-100)", "Governance (0-100)", "Strategic Clarity (0-100)",
-            "Track Record (0-100)", "Outcome Measurement (0-100)", "Leadership Stability (0-100)",
-            "Reporting Capacity (0-100)",
-        ]):
+        for key, name in zip(MANUAL_KEYS, MANUAL_COLUMN_NAMES):
             val = row.get(key, 50)
             c = ws[f"{col[name]}{r}"]
             c.value = val
@@ -206,9 +209,7 @@ def add_portfolio_scorecard_sheet(wb, org_rows, sheet_name="Portfolio Scorecard"
         for name, _fmt, _group in COLUMNS[2:8]:
             ws[f"{col[name]}{br}"] = 0
             ws[f"{col[name]}{br}"].font = BLUE
-        for name in ["Legal & Compliance (0-100)", "Governance (0-100)", "Strategic Clarity (0-100)",
-                     "Track Record (0-100)", "Outcome Measurement (0-100)", "Leadership Stability (0-100)",
-                     "Reporting Capacity (0-100)"]:
+        for name in MANUAL_COLUMN_NAMES:
             ws[f"{col[name]}{br}"] = 50
             ws[f"{col[name]}{br}"].font = Font(name=FONT, color="1B5E20")
         _write_formula_row(ws, col, br)
@@ -226,22 +227,20 @@ def add_portfolio_scorecard_sheet(wb, org_rows, sheet_name="Portfolio Scorecard"
     dv = DataValidation(type="whole", operator="between", formula1="0", formula2="100",
                          errorTitle="Invalid score", error="Enter a whole number from 0 to 100.")
     ws.add_data_validation(dv)
-    for name in ["Legal & Compliance (0-100)", "Governance (0-100)", "Strategic Clarity (0-100)",
-                 "Track Record (0-100)", "Outcome Measurement (0-100)", "Leadership Stability (0-100)",
-                 "Reporting Capacity (0-100)"]:
+    for name in MANUAL_COLUMN_NAMES:
         dv.add(f"{col[name]}{DATA_START}:{col[name]}{last_row}")
 
     weights_row = blank_end + 1
     ws.cell(row=weights_row, column=1,
-            value=("Weights: Legal 15% · Financial 20% · Governance 10% · Strategy 10% · "
-                   "Track Record 15% · Outcomes 15% · Leadership 5% · Reporting 10% — "
-                   "matches RUBRIC in scoring.py")).font = SUBTLE
+            value=("Weights: Strategy 10% · Program 20% · Financial 20% · Leadership 10% · "
+                   "Operations 15% · Partnerships 10% · Governance 15% — "
+                   "matches STAGE_WEIGHTS['FUND'] in scoring.py")).font = SUBTLE
     ws.merge_cells(f"A{weights_row}:F{weights_row}")
     ws[f"A{weights_row}"].alignment = Alignment(wrap_text=True)
 
     widths = {"A": 26, "B": 14, "C": 15, "D": 15, "E": 15, "F": 15, "G": 15, "H": 15,
-              "I": 12, "J": 12, "K": 13, "L": 11, "M": 11, "N": 11, "O": 11, "P": 11, "Q": 11, "R": 11,
-              "S": 11, "T": 13, "U": 55}
+              "I": 12, "J": 12, "K": 13, "L": 11, "M": 11, "N": 11, "O": 11, "P": 11, "Q": 11,
+              "R": 11, "S": 13, "T": 55}
     for c, w in widths.items():
         ws.column_dimensions[c].width = w
 

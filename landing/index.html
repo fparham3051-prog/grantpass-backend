@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InstitutionalOS — Health Index Engine | Frankly Inspired</title>
+<meta name="description" content="InstitutionalOS scores your nonprofit across BUILD, FUND, and SUSTAIN — the seven dimensions funders and boards actually weigh, free, in seconds — part of Frankly Inspired and Associates, LLC.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#11233D; --navy-deep:#0b1a2d; --navy-mid:#16294a;
+    --white:#FFFFFF; --gold:#B28E42; --gold-light:#cba869; --gold-accessible:#8E7134;
+    --gold-soft:rgba(178,142,66,0.12); --charcoal:#23282D; --light-gray:#F3F5F7; --border:#e2e6ea;
+    --band-0:#b3402c; --band-1:#c97a2e; --band-2:#b28e42; --band-3:#6f9c4d; --band-4:#3d7a45;
+    --font-heading:'Playfair Display', Georgia, 'Times New Roman', serif;
+    --font-body:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius:14px; --radius-lg:22px;
+    --shadow-sm:0 2px 10px rgba(17,35,61,.06); --shadow-md:0 20px 44px rgba(17,35,61,.12);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--white);color:var(--charcoal);font:16px/1.65 var(--font-body);-webkit-font-smoothing:antialiased}
+  a{color:var(--navy);text-decoration-color:var(--gold);text-underline-offset:.15em}
+  a:hover{color:var(--gold-accessible)}
+  h1,h2,h3,h4{font-family:var(--font-heading);color:var(--navy);line-height:1.18;margin:0 0 .5em;font-weight:600;letter-spacing:-.012em}
+  .wrap{max-width:900px;margin:0 auto;padding:0 24px}
+
+  .breadcrumb{background:var(--navy-deep);color:rgba(255,255,255,.75);font-size:13px;padding:9px 0}
+  .breadcrumb .wrap{display:flex;align-items:center;gap:6px}
+  .breadcrumb a{color:#fff;text-decoration-color:var(--gold)}
+
+  header{border-bottom:1px solid var(--border);padding:18px 0;position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);z-index:10}
+  header .wrap{display:flex;align-items:center;justify-content:space-between}
+  .logo{display:flex;align-items:center;gap:10px;font-family:var(--font-heading);font-weight:600;font-size:19px;color:var(--navy)}
+  .logo .mark{width:30px;height:30px;border-radius:8px;background:var(--navy);color:var(--gold-light);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:var(--font-body);font-weight:700}
+  nav{display:flex;align-items:center;gap:24px;font-size:14px;color:var(--charcoal)}
+  nav a:not(.btn){text-decoration:none;color:var(--charcoal)}
+  nav a:not(.btn):hover{color:var(--gold-accessible)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;padding:11px 20px;font-weight:600;font-size:14px;cursor:pointer;border:1px solid transparent;text-decoration:none;font-family:var(--font-body)}
+  .btn-primary{background:var(--navy);color:#fff}
+  .btn-primary:hover{background:var(--navy-mid);color:#fff}
+  .btn-ghost{background:transparent;border-color:var(--border);color:var(--navy)}
+  .btn-ghost:hover{border-color:var(--gold);color:var(--navy)}
+
+  .hero{padding:72px 0 36px;text-align:center;background:linear-gradient(180deg,var(--light-gray),#fff 60%)}
+  .eyebrow{display:inline-block;background:var(--gold-soft);color:var(--gold-accessible);border-radius:999px;padding:6px 16px;font-size:13px;font-weight:600;margin-bottom:22px;letter-spacing:.01em}
+  h1{font-size:clamp(2.1rem,4.6vw,3.2rem)}
+  h1 .accent{color:var(--gold-accessible)}
+  .lede{color:#4b5560;font-size:18px;max-width:600px;margin:0 auto 30px}
+  .hero-ctas{display:flex;gap:12px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
+  .fineprint{color:#7a8390;font-size:13px}
+
+  .steps{display:grid;gap:14px;margin:50px 0;grid-template-columns:repeat(4,1fr)}
+  @media (max-width:760px){.steps{grid-template-columns:1fr}}
+  .step{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:20px 20px;box-shadow:var(--shadow-sm)}
+  .step .no{font-size:11.5px;font-weight:700;letter-spacing:.07em;color:var(--gold-accessible)}
+  .step h3{margin:8px 0 5px;font-size:16px}
+  .step p{margin:0;color:#5a6470;font-size:14px}
+
+  section{padding:52px 0;border-top:1px solid var(--border)}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gold-accessible)}
+  h2{font-size:clamp(1.6rem,3.2vw,2.2rem);margin:6px 0 12px}
+  .section-lede{color:#5a6470;max-width:620px;margin:0 0 28px}
+
+  .stage-tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .stage-tab{border:1px solid var(--border);background:#fff;border-radius:10px;padding:12px 16px;cursor:pointer;font-family:var(--font-body);text-align:left;flex:1;min-width:180px}
+  .stage-tab .stage-name{display:block;font-weight:700;color:var(--navy);font-size:14px}
+  .stage-tab .stage-q{display:block;color:#5a6470;font-size:12.5px;margin-top:3px;line-height:1.4}
+  .stage-tab.active{border-color:var(--gold);background:var(--gold-soft)}
+  .stage-tab:hover{border-color:var(--gold)}
+
+  .demo-card{background:var(--light-gray);border:1px solid var(--border);border-radius:var(--radius-lg);padding:26px}
+  .demo-card label{display:block;font-weight:600;font-size:14px;margin-bottom:10px;color:var(--navy)}
+  textarea{width:100%;min-height:150px;border:1px solid var(--border);border-radius:10px;padding:14px;font:14.5px/1.55 var(--font-body);resize:vertical;background:#fff}
+  textarea:focus{outline:2px solid var(--gold);outline-offset:1px}
+  .samples{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+  .sample-btn{border:1px solid var(--border);background:#fff;border-radius:999px;padding:8px 15px;font-size:13px;cursor:pointer;color:var(--navy);font-family:var(--font-body)}
+  .sample-btn:hover{border-color:var(--gold)}
+  .analyze-row{display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap}
+  #status{font-size:13px;color:#5a6470}
+
+  .result{margin-top:26px;border-top:1px dashed var(--border);padding-top:24px;display:none}
+  .result.show{display:block}
+  .overall{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
+  .overall .score{font-family:var(--font-heading);font-size:42px;font-weight:700;color:var(--navy)}
+  .badge{display:inline-block;border-radius:999px;padding:5px 15px;font-size:13px;font-weight:700}
+  .badge.red{background:rgba(179,64,44,.12);color:var(--band-0)}
+  .badge.yellow{background:rgba(178,142,66,.14);color:var(--gold-accessible)}
+  .badge.green{background:rgba(61,122,69,.12);color:var(--band-4)}
+  .method-note{font-size:12.5px;color:#7a8390;margin-left:auto}
+  .decision-line{font-size:13.5px;color:#5a6470;margin:0 0 8px}
+  .decision-line strong{color:var(--navy)}
+  .gate-line{font-size:13px;margin:0 0 20px;padding:10px 14px;border-radius:8px}
+  .gate-line.met{background:rgba(61,122,69,.08);color:var(--band-4)}
+  .gate-line.open{background:rgba(179,64,44,.08);color:var(--band-0)}
+  .dims{display:grid;gap:11px}
+  .dim{display:grid;grid-template-columns:190px 1fr auto;gap:14px;align-items:center;font-size:14px}
+  .dim .name{font-weight:600;color:var(--navy)}
+  .bar{height:8px;border-radius:999px;background:var(--border);overflow:hidden}
+  .bar > span{display:block;height:100%;border-radius:999px}
+  .bar.red > span{background:var(--band-0)}
+  .bar.yellow > span{background:var(--band-2)}
+  .bar.green > span{background:var(--band-4)}
+  .dim .num{font-weight:700;width:34px;text-align:right;color:var(--navy)}
+  .dim .note{grid-column:1 / -1;color:#5a6470;font-size:13px;margin-top:-4px}
+  .dim .lift{grid-column:1 / -1;color:var(--gold-accessible);font-size:12.5px;margin-top:-2px}
+
+  .risk-grid{display:grid;gap:16px;grid-template-columns:repeat(3,1fr)}
+  @media (max-width:760px){.risk-grid{grid-template-columns:1fr}}
+  .risk-card{border-radius:var(--radius);padding:22px 22px;border:1px solid var(--border)}
+  .risk-card.not-ready{background:rgba(179,64,44,.06)}
+  .risk-card.needs-work{background:rgba(178,142,66,.08)}
+  .risk-card.ready{background:rgba(61,122,69,.07)}
+  .risk-card h3{margin:0 0 4px;font-size:17px}
+  .risk-card .tag{font-weight:700;font-size:13px;margin-bottom:10px}
+  .risk-card.not-ready .tag{color:var(--band-0)}
+  .risk-card.needs-work .tag{color:var(--gold-accessible)}
+  .risk-card.ready .tag{color:var(--band-4)}
+  .risk-card ul{margin:0;padding-left:18px;color:#5a6470;font-size:14px}
+  .risk-card li{margin:5px 0}
+
+  .dims-overview{display:grid;gap:12px;grid-template-columns:repeat(2,1fr)}
+  @media (max-width:700px){.dims-overview{grid-template-columns:1fr}}
+  .dim-card{border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;background:#fff}
+  .dim-card .w{font-size:11.5px;font-weight:700;color:var(--gold-accessible);letter-spacing:.04em}
+  .dim-card h4{margin:4px 0 4px;font-size:15px;color:var(--navy)}
+  .dim-card p{margin:0;color:#5a6470;font-size:13px}
+
+  .lift-note{background:var(--navy);color:#fff;border-radius:var(--radius-lg);padding:26px 28px;margin-top:30px}
+  .lift-note h3{color:#fff;font-size:18px;margin-bottom:8px}
+  .lift-note p{color:rgba(255,255,255,.82);margin:0;font-size:14.5px;max-width:620px}
+
+  .cta-panel{background:var(--light-gray);border-radius:var(--radius-lg);padding:34px;text-align:center}
+  .cta-panel h3{margin-bottom:8px}
+  .cta-panel p{color:#5a6470;max-width:520px;margin:0 auto 20px}
+
+  footer{padding:34px 0;text-align:center;color:#7a8390;font-size:12.5px}
+  footer a{color:#7a8390}
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><div class="wrap">Part of <a href="https://frankly-inspired-website-astro.onrender.com">Frankly Inspired and Associates, LLC</a></div></div>
+
+<header>
+  <div class="wrap">
+    <div class="logo"><span class="mark">iOS</span> InstitutionalOS</div>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#demo">Free Scorecard</a>
+      <a href="https://frankly-inspired-website-astro.onrender.com/assessment">Self-Assessment</a>
+      <a href="#demo" class="btn btn-primary">Score My Org</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero wrap">
+  <span class="eyebrow" id="heroEyebrow">InstitutionalOS · FUND stage · Grant Readiness Health Index</span>
+  <h1>Your mission deserves<br>funding, not <span class="accent">guesswork.</span></h1>
+  <p class="lede" id="heroLede">InstitutionalOS reads your financials, governance, and programs, scores your readiness across the seven dimensions real funders and boards weigh, and shows you exactly what to strengthen — before you apply, not after you're declined.</p>
+  <div class="hero-ctas">
+    <a href="#demo" class="btn btn-primary">Score My Org — Free</a>
+    <a href="#how" class="btn btn-ghost">See how it works</a>
+  </div>
+  <div class="fineprint">Free scorecard. No account required. Not a substitute for the full guided Review.</div>
+</div>
+
+<div class="wrap steps" id="how">
+  <div class="step"><div class="no">01 CHOOSE A STAGE</div><h3>BUILD, FUND, or SUSTAIN</h3><p>Pick the lifecycle question closest to where your organization is right now.</p></div>
+  <div class="step"><div class="no">02 DESCRIBE</div><h3>Tell us about your org</h3><p>Paste a paragraph about your finances, board, and programs.</p></div>
+  <div class="step"><div class="no">03 SCORE</div><h3>Get scored, live</h3><p>InstitutionalOS scores 7 weighted dimensions and flags what's missing.</p></div>
+  <div class="step"><div class="no">04 GO DEEPER</div><h3>Bring in real evidence</h3><p>The full guided Review scores your actual filed evidence, with Franklin directly.</p></div>
+</div>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="kicker">Live scorecard</div>
+    <h2>See your Health Index score in seconds.</h2>
+    <p class="section-lede">This is a real analysis, not a mockup — pick a lifecycle stage, describe your organization (or load a sample), and InstitutionalOS will score it live against that stage of the Health Index Engine.</p>
+
+    <div class="stage-tabs" id="stageTabs">
+      <button class="stage-tab active" data-stage="BUILD">
+        <span class="stage-name">BUILD</span>
+        <span class="stage-q">Should this organization exist, and what must become true before launch?</span>
+      </button>
+      <button class="stage-tab" data-stage="FUND">
+        <span class="stage-name">FUND</span>
+        <span class="stage-q">Is the organization genuinely ready to pursue and manage institutional funding?</span>
+      </button>
+      <button class="stage-tab" data-stage="SUSTAIN">
+        <span class="stage-name">SUSTAIN</span>
+        <span class="stage-q">Can the institution operate, adapt, and endure?</span>
+      </button>
+    </div>
+
+    <div class="demo-card">
+      <label for="orgDesc">Organization profile</label>
+      <textarea id="orgDesc" placeholder="Describe your organization: how long you've operated, your budget and revenue sources, board size and meeting cadence, whether financials are audited, how you track outcomes, whether you have funder partnerships..."></textarea>
+      <div class="samples">
+        <button class="sample-btn" data-sample="riverside">Load: Riverside Community Kitchen (early-stage)</button>
+        <button class="sample-btn" data-sample="brightpath">Load: Bright Path Youth Alliance (established)</button>
+      </div>
+      <div class="analyze-row">
+        <button class="btn btn-primary" id="analyzeBtn">Score My Org</button>
+        <span id="status"></span>
+      </div>
+
+      <div class="result" id="result">
+        <div class="overall">
+          <div class="score" id="overallScore">—</div>
+          <span class="badge" id="overallBadge"></span>
+          <span class="method-note" id="methodNote"></span>
+        </div>
+        <p class="decision-line" id="decisionLine"></p>
+        <p class="gate-line" id="gateLine"></p>
+        <div class="dims" id="dims"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">The seven dimensions</div>
+    <h2>The same rubric funders and boards use internally.</h2>
+    <p class="section-lede">Every InstitutionalOS score — whichever lifecycle stage — is built from these seven weighted dimensions, drawn from the InstitutionalOS Health Index Engine spec. Weights below update to match the stage selected above.</p>
+    <div class="dims-overview" id="dimsOverview"></div>
+
+    <div class="lift-note">
+      <h3 id="liftHeadline">75 is the first real permission threshold — not proof of perfection.</h3>
+      <p>InstitutionalOS uses a 25% lift target on every dimension below its ready gate: the next realistic evidence goal, not an all-or-nothing bar. A single unresolved red risk can hold back a "move forward" decision even when the average score looks strong — that check is part of the full guided Review.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">What each score means</div>
+    <h2>Every gap sorted, in the same language funders use.</h2>
+    <div class="risk-grid">
+      <div class="risk-card not-ready">
+        <h3>Not Ready</h3>
+        <div class="tag">Fix before you apply.</div>
+        <ul>
+          <li>No audited or reviewed financials</li>
+          <li>&gt;70% revenue from one source</li>
+          <li>No written bylaws or governance policy</li>
+          <li>No outcome data beyond activity counts</li>
+        </ul>
+      </div>
+      <div class="risk-card needs-work">
+        <h3>Needs Work</h3>
+        <div class="tag">Worth strengthening.</div>
+        <ul>
+          <li>Reserves cover 1–3 months</li>
+          <li>Strategic plan exists but is dated</li>
+          <li>Reporting is on time but manual</li>
+          <li>Partnerships exist but aren't formalized</li>
+        </ul>
+      </div>
+      <div class="risk-card ready">
+        <h3>Ready</h3>
+        <div class="tag">Looks strong to funders.</div>
+        <ul>
+          <li>Audited financials, diversified revenue</li>
+          <li>Active, governed board with written bylaws</li>
+          <li>Outcome tracking tied to mission</li>
+          <li>Named funder relationships and MOUs</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta-panel">
+      <h3>Want the full guided Review?</h3>
+      <p>This free scorecard is the self-service read. The full Review is a guided diagnostic where Franklin scores your organization directly — Revenue and Financial Health pulled from your actual filed Form 990 data, a written rationale behind every dimension, and (for FUND) a weighted ranking against the specific funders you're targeting.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="https://frankly-inspired-website-astro.onrender.com/#pricing">See Pricing</a>
+        <a class="btn btn-ghost" href="https://calendly.com/fparham/30min" target="_blank" rel="noopener">Schedule a Conversation</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    InstitutionalOS is a diagnostic tool from Frankly Inspired and Associates, LLC. Scores are estimates for illustration and are not a substitute for a funder's actual review, financial advice, or legal advice.
+    <br>© 2026 Frankly Inspired and Associates, LLC · <a href="https://frankly-inspired-website-astro.onrender.com">franklyinspired.associates</a>
+  </div>
+</footer>
+
+<script>
+const API_BASE = "https://grantpass-backend.onrender.com";
+
+const STAGE_WEIGHTS = {
+  BUILD:   { strategy:20, program:15, financial:10, leadership:15, operations:10, partnerships:10, governance:20 },
+  FUND:    { strategy:10, program:20, financial:20, leadership:10, operations:15, partnerships:10, governance:15 },
+  SUSTAIN: { strategy:15, program:15, financial:20, leadership:15, operations:15, partnerships:10, governance:10 },
+};
+const DIM_META = [
+  { key:"strategy", name:"Strategy and Positioning", desc:"Case for support, sequenced funding priorities, funder fit, a realistic calendar." },
+  { key:"program", name:"Program and Impact Evidence", desc:"Outcome framework, evidence ledger, logic model, approved claims — not just activity counts." },
+  { key:"financial", name:"Revenue and Financial Health", desc:"Approved budgets, current financial statements, revenue concentration, cost allocation." },
+  { key:"leadership", name:"Leadership and Organizational Capacity", desc:"A named owner, cross-team approval workflow, board's role, capacity to manage the work." },
+  { key:"operations", name:"Operations and Infrastructure", desc:"Document repository, pipeline tracking, submission workflow, post-award reporting." },
+  { key:"partnerships", name:"Partnerships and Ecosystem", desc:"Relationship strategy, MOUs and letters of commitment, referral and philanthropic ecosystem." },
+  { key:"governance", name:"Governance and Risk", desc:"Tax-exempt/fiscal-sponsorship status, required filings, restricted-fund controls, claim approval." },
+];
+const STAGE_EYEBROW = {
+  BUILD: "InstitutionalOS · BUILD stage · Organization Formation Health Index",
+  FUND: "InstitutionalOS · FUND stage · Grant Readiness Health Index",
+  SUSTAIN: "InstitutionalOS · SUSTAIN stage · Institutional Health Index",
+};
+const STAGE_LEDE = {
+  BUILD: "InstitutionalOS reads your formation evidence, ecosystem, and operating assumptions, scores whether you're ready to launch across the seven dimensions that matter, and shows exactly what to strengthen before you proceed.",
+  FUND: "InstitutionalOS reads your financials, governance, and programs, scores your readiness across the seven dimensions real funders weigh, and shows you exactly what to strengthen — before you apply, not after you're declined.",
+  SUSTAIN: "InstitutionalOS reads your operating evidence, economics, and leadership bench strength, scores your durability across the seven dimensions that predict whether an institution lasts, and shows what to repair first.",
+};
+
+let selectedStage = "BUILD";
+
+function renderDimsOverview() {
+  const weights = STAGE_WEIGHTS[selectedStage];
+  const el = document.getElementById("dimsOverview");
+  el.innerHTML = "";
+  DIM_META.forEach(d => {
+    const card = document.createElement("div");
+    card.className = "dim-card";
+    card.innerHTML = `<div class="w">${weights[d.key]}% WEIGHT</div><h4>${d.name}</h4><p>${d.desc}</p>`;
+    el.appendChild(card);
+  });
+}
+
+function setStage(stage) {
+  selectedStage = stage;
+  document.querySelectorAll(".stage-tab").forEach(t => t.classList.toggle("active", t.dataset.stage === stage));
+  document.getElementById("heroEyebrow").textContent = STAGE_EYEBROW[stage];
+  document.getElementById("heroLede").textContent = STAGE_LEDE[stage];
+  renderDimsOverview();
+}
+
+document.querySelectorAll(".stage-tab").forEach(tab => {
+  tab.addEventListener("click", () => setStage(tab.dataset.stage));
+});
+renderDimsOverview();
+setStage("BUILD");
+
+const SAMPLES = {
+  riverside: "Riverside Community Kitchen has operated for 2 years providing free meals and job-readiness training to about 300 families a month in East Riverside. Annual budget is $180,000, with 78% coming from a single county grant renewed annually and the rest from small individual donations. We do not have audited financials, just a bookkeeper-prepared statement. We have about six weeks of operating reserves. Our board has 4 members who meet twice a year and there are no written bylaws yet. We track how many meals are served and how many people attend trainings, but we dont yet measure longer-term outcomes like job placement. We have no formal partnerships with other organizations.",
+  brightpath: "Bright Path Youth Alliance has operated for 6 years providing after-school mentoring to 500 youth annually. Annual budget is $1.2M with diversified funding: roughly a third from a mix of three foundations, a quarter from individual donors, a fifth from government contracts, and the rest from earned revenue. Financials are audited annually. Our 9-member board meets quarterly and has written bylaws and a conflict of interest policy. We have a strategic plan updated last year and a clear case for support tied to specific funding priorities. We track program outcomes including graduation rates and post-program employment, not just attendance. Leadership includes an executive director and a deputy director with a documented succession plan. We report to funders on time using our grants management system. We partner closely with three local school districts through signed MOUs."
+};
+
+document.querySelectorAll(".sample-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.getElementById("orgDesc").value = SAMPLES[btn.dataset.sample];
+  });
+});
+
+document.getElementById("analyzeBtn").addEventListener("click", async () => {
+  const desc = document.getElementById("orgDesc").value.trim();
+  const status = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const btn = document.getElementById("analyzeBtn");
+
+  if (desc.length < 40) {
+    status.textContent = "Add a bit more detail (at least 40 characters) for a real read.";
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = "Scoring…";
+  resultEl.classList.remove("show");
+
+  try {
+    const res = await fetch(`${API_BASE}/demo/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: desc, stage: selectedStage })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Something went wrong.");
+    renderResult(data);
+    status.textContent = data.method === "ai" ? "Scored by InstitutionalOS (AI read)." : "Scored by InstitutionalOS (deterministic rubric).";
+  } catch (err) {
+    status.textContent = "Couldn't reach InstitutionalOS: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function renderResult(data) {
+  document.getElementById("overallScore").textContent = Math.round(data.overall);
+  const badge = document.getElementById("overallBadge");
+  badge.textContent = data.status;
+  badge.className = "badge " + (data.overall >= 75 ? "green" : data.overall >= 55 ? "yellow" : "red");
+  document.getElementById("methodNote").textContent =
+    (data.method === "ai" ? "AI-read scorecard" : "Deterministic rubric scorecard") + ` · ${data.stage || selectedStage} stage`;
+
+  const decisionLine = document.getElementById("decisionLine");
+  if (data.decisionBand && data.decisionBand.decision) {
+    decisionLine.textContent = `${data.decisionBand.interpretation} — default decision: `;
+    const strong = document.createElement("strong");
+    strong.textContent = data.decisionBand.decision;
+    decisionLine.appendChild(strong);
+  } else {
+    decisionLine.textContent = "";
+  }
+
+  const gateLine = document.getElementById("gateLine");
+  if (data.hardGate) {
+    const met = data.hardGate.status === "Met";
+    gateLine.className = "gate-line " + (met ? "met" : "open");
+    if (met) {
+      gateLine.textContent = "Hard gate: Met — no numeric floor for this stage is currently open.";
+    } else {
+      const openList = data.hardGate.open.map(g => `${g.dimension} (needs ${g.required}, at ${g.actual})`).join(", ");
+      gateLine.textContent = `Hard gate: Open — ${openList}. ${data.hardGate.note}`;
+    }
+  } else {
+    gateLine.textContent = "";
+  }
+
+  const dimsEl = document.getElementById("dims");
+  dimsEl.innerHTML = "";
+  data.dimensions.forEach(d => {
+    const row = document.createElement("div");
+    row.className = "dim";
+    const liftHtml = (d.score < 75 && d.liftTarget != null)
+      ? `<div class="lift">25% lift target: ${d.liftTarget}</div>` : "";
+    row.innerHTML = `
+      <div class="name">${d.name}</div>
+      <div class="bar ${d.level}"><span style="width:${d.score}%"></span></div>
+      <div class="num">${d.score}</div>
+      <div class="note">${d.note}</div>
+      ${liftHtml}
+    `;
+    dimsEl.appendChild(row);
+  });
+
+  document.getElementById("result").classList.add("show");
+}
+</script>
+
+</body>
+</html>

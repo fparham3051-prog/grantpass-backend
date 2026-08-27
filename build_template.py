@@ -63,22 +63,22 @@ def build(out_path="grantpass-financial-workbook.xlsx"):
             "name": "Bright Path Youth Alliance", "ein": "133556677",
             "total_revenue": 2415000, "total_expenses": 2260000, "total_assets": 1980000,
             "net_assets": 1120000, "contributions_revenue": 1680000, "program_revenue": 410000,
-            "legal": 90, "governance": 85, "strategy": 80, "trackRecord": 88,
-            "outcomes": 82, "leadership": 78, "reporting": 92,
+            "strategy": 80, "program": 85, "leadership": 78, "operations": 88,
+            "partnerships": 85, "governance": 88,
             "note": "Financials: real fixture (sample_990.xml / ProPublica). Dimension scores: same values used in the backend test run.",
         },
         {
             "name": "Riverside Community Kitchen", "ein": "042614022",
             "total_revenue": 180000, "total_expenses": 175000, "total_assets": 25000,
             "net_assets": 20500, "contributions_revenue": 140400, "program_revenue": 39600,
-            "legal": 55, "governance": 40, "strategy": 55, "trackRecord": 50,
-            "outcomes": 45, "leadership": 40, "reporting": 60,
+            "strategy": 50, "program": 45, "leadership": 40, "operations": 55,
+            "partnerships": 35, "governance": 45,
             "note": "Financials: ILLUSTRATIVE — estimated from the org's earlier narrative description, not a filed 990.",
         },
     ]
     add_portfolio_scorecard_sheet(
         wb, org_rows,
-        subtitle=("Blue cells are raw inputs. Green cells are manual scores (0-100) for the 7 "
+        subtitle=("Blue cells are raw inputs. Green cells are manual scores (0-100) for the 6 "
                   "qualitative dimensions — same inputs POST /orgs/{id}/dimensions expects. Gray "
                   "and gold cells are formulas. Two example rows use the same organizations used "
                   "throughout this project."),

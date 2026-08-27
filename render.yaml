@@ -1,6 +1,8 @@
 # Render Blueprint - https://render.com/docs/blueprint-spec
-# Deploys this backend as a Docker web service with a persistent disk for
-# the SQLite file (Render's filesystem is otherwise ephemeral on redeploy).
+# Deploys this backend as a Docker web service. Storage is Postgres (Neon)
+# via DATABASE_URL, not a local disk - Render's free-tier filesystem is
+# ephemeral on every deploy/restart, which is exactly what moved this off
+# SQLite (see db.py).
 services:
   - type: web
     name: grantpass-backend
@@ -10,11 +12,7 @@ services:
     envVars:
       - key: GRANTPASS_SECRET
         generateValue: true
-      - key: GRANTPASS_DB
-        value: /app/data/grantpass.db
+      - key: DATABASE_URL
+        sync: false
       - key: PORT
         value: 8420
-    disk:
-      name: grantpass-data
-      mountPath: /app/data
-      sizeGB: 1

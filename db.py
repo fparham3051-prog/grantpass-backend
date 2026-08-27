@@ -167,6 +167,20 @@ CREATE TABLE IF NOT EXISTS compliance_items (
     completed_at TEXT,
     created_at TEXT NOT NULL
 );
+
+-- Log of every public /demo/score call (the marketing site's "paste your
+-- org, get scored" live demo) - aggregate-only reads (see
+-- server.py:_demo_benchmarks), never exposed per-row. stage is one of
+-- BUILD/FUND/SUSTAIN (see scoring.STAGE_WEIGHTS); defaults to FUND for
+-- rows logged before the stage argument existed.
+CREATE TABLE IF NOT EXISTS demo_score_log (
+    id SERIAL PRIMARY KEY,
+    overall REAL,
+    dimensions_json TEXT,
+    method TEXT,
+    stage TEXT DEFAULT 'FUND',
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -235,6 +249,10 @@ def get_conn():
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA)
+    # Postgres supports ADD COLUMN IF NOT EXISTS natively, so no try/except
+    # migration dance is needed here the way SQLite would have required -
+    # this is a no-op once the column exists.
+    conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.commit()
     conn.close()
 

@@ -3,7 +3,7 @@ Exports every organization in your GrantPass backend into an Excel workbook
 shaped exactly like the Portfolio Scorecard template (same shared builder,
 portfolio_sheet.py) — the DB-to-Excel counterpart to bulk_ingest.py's
 CSV-to-DB direction. Pulls each org's latest financial snapshot and its
-current readiness score (all 8 dimensions) via the backend's own API, so it
+current readiness score (all 7 dimensions) via the backend's own API, so it
 only ever reads what a normal API client could read.
 
 Usage:
@@ -52,9 +52,9 @@ def fetch_org_row(api_url: str, token: str, org: dict) -> dict:
 
     dims_by_name = {d["name"]: d["score"] for d in score_body.get("dimensions", [])}
     name_to_key = {
-        "Legal & Compliance": "legal", "Governance": "governance", "Strategic Clarity": "strategy",
-        "Track Record": "trackRecord", "Outcome Measurement": "outcomes",
-        "Leadership Stability": "leadership", "Reporting Capacity": "reporting",
+        "Strategy and Positioning": "strategy", "Program and Impact Evidence": "program",
+        "Leadership and Organizational Capacity": "leadership", "Operations and Infrastructure": "operations",
+        "Partnerships and Ecosystem": "partnerships", "Governance and Risk": "governance",
     }
     manual_scores = {key: dims_by_name.get(dim_name, 50) for dim_name, key in name_to_key.items()}
 

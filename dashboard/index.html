@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GrantPass Console</title>
+<title>InstitutionalOS Console</title>
 <style>
   :root {
     color-scheme: light;
@@ -96,7 +96,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">GrantPass <span>Console</span></div>
+    <div class="logo">InstitutionalOS <span>Console</span></div>
     <div class="api-row">
       <span>API:</span>
       <input id="apiUrl" value="https://grantpass-backend.onrender.com">
@@ -193,27 +193,9 @@
         </div>
 
         <h3>Dimension Scores</h3>
-        <p class="hint">Pick the option that best describes where you are today — you can always change it later. Each choice sets the 0-100 score behind the scenes.</p>
+        <p class="hint">Pick the option that best describes where you are today — you can always change it later. Each choice sets the 0-100 score behind the scenes. Matches the InstitutionalOS 7-dimension FUND rubric (Revenue and Financial Health is computed automatically from your ingested financial data above).</p>
         <div class="row3">
-          <div><label>Legal & Compliance</label>
-            <select id="dimLegal" class="dim-select">
-              <option value="20">Not tracked — unsure if filings are current</option>
-              <option value="40">Aware of requirements, but filings or policies are often late or missing</option>
-              <option value="60" selected>Core filings (990, state registration) are current; basic policies exist</option>
-              <option value="80">All filings current, plus key policies (conflict of interest, whistleblower, records)</option>
-              <option value="95">Fully current on all filings; policies reviewed annually with board oversight</option>
-            </select>
-          </div>
-          <div><label>Governance</label>
-            <select id="dimGovernance" class="dim-select">
-              <option value="20">No active board, or board has little real oversight</option>
-              <option value="40">Board exists but is mostly inactive or rarely meets</option>
-              <option value="60" selected>Board meets regularly and reviews finances</option>
-              <option value="80">Board is engaged, has committees, and provides real strategic input</option>
-              <option value="95">Board is highly engaged and diverse, and actively drives strategy and accountability</option>
-            </select>
-          </div>
-          <div><label>Strategic Clarity</label>
+          <div><label>Strategy and Positioning</label>
             <select id="dimStrategy" class="dim-select">
               <option value="20">No written strategic plan or clear direction</option>
               <option value="40">General sense of mission, but no documented goals or plan</option>
@@ -222,27 +204,16 @@
               <option value="95">Strategic plan is current, well-communicated, and drives programs and budgeting</option>
             </select>
           </div>
-        </div>
-        <div class="row3">
-          <div><label>Track Record</label>
-            <select id="dimTrackRecord" class="dim-select">
-              <option value="20">New organization, or no track record of delivering programs yet</option>
-              <option value="40">Some program history, but limited evidence of consistent delivery</option>
-              <option value="60" selected>Consistent delivery for 1-3 years with some documented results</option>
-              <option value="80">3+ years of consistent delivery with solid documentation of results</option>
-              <option value="95">Long, well-documented track record with a strong reputation among funders/peers</option>
+          <div><label>Program and Impact Evidence</label>
+            <select id="dimProgram" class="dim-select">
+              <option value="20">No track record of delivering programs yet, and no outcome data collected</option>
+              <option value="40">Some program history, but mostly activity counts (people served, events held) — no real outcomes tracked</option>
+              <option value="60" selected>Consistent delivery with some outcomes tracked informally, not yet systematic</option>
+              <option value="80">3+ years of consistent delivery with systematic outcome tracking tied to program goals</option>
+              <option value="95">Long, well-documented track record with robust outcome measurement and regular external reporting or evaluation</option>
             </select>
           </div>
-          <div><label>Outcome Measurement</label>
-            <select id="dimOutcomes" class="dim-select">
-              <option value="20">Only track activities (e.g. events held), not outcomes</option>
-              <option value="40">Track basic outputs (e.g. people served), not real outcomes</option>
-              <option value="60" selected>Track some outcomes informally, but not consistently</option>
-              <option value="80">Systematic outcome tracking tied to program goals</option>
-              <option value="95">Robust outcome measurement with regular external reporting or evaluation</option>
-            </select>
-          </div>
-          <div><label>Leadership Stability</label>
+          <div><label>Leadership and Org. Capacity</label>
             <select id="dimLeadership" class="dim-select">
               <option value="20">No permanent executive leadership currently, or high recent turnover</option>
               <option value="40">Leadership in place less than a year, or history of frequent turnover</option>
@@ -253,13 +224,31 @@
           </div>
         </div>
         <div class="row3">
-          <div><label>Reporting Capacity</label>
-            <select id="dimReporting" class="dim-select">
-              <option value="20">No regular reporting beyond what's legally required</option>
-              <option value="40">Basic financial reports produced, but inconsistently</option>
-              <option value="60" selected>Regular financial and program reports go to board/funders</option>
-              <option value="80">Timely, detailed reporting to board and funders, including outcomes</option>
-              <option value="95">Real-time dashboards or reporting shared proactively with stakeholders</option>
+          <div><label>Operations and Infrastructure</label>
+            <select id="dimOperations" class="dim-select">
+              <option value="20">No regular reporting or documented workflows beyond what's legally required</option>
+              <option value="40">Basic financial/program reports produced inconsistently; no real systems for tracking work</option>
+              <option value="60" selected>Regular reporting to board/funders; core workflows (grants tracking, document storage) are informal but functional</option>
+              <option value="80">Timely, detailed reporting including outcomes; documented workflows and a real system for tracking pipeline/deliverables</option>
+              <option value="95">Real-time dashboards or proactive reporting; mature systems (CRM, document repository, QA) support delivery at scale</option>
+            </select>
+          </div>
+          <div><label>Partnerships and Ecosystem</label>
+            <select id="dimPartnerships" class="dim-select">
+              <option value="20">No formal partnerships with other organizations</option>
+              <option value="40">Informal relationships exist, but nothing documented or actively managed</option>
+              <option value="60" selected>A few partnerships exist, some with informal agreements</option>
+              <option value="80">Multiple active partnerships with signed MOUs or letters of commitment</option>
+              <option value="95">A deliberate partnership strategy with named, actively stewarded relationships across funders/peers/referral sources</option>
+            </select>
+          </div>
+          <div><label>Governance and Risk</label>
+            <select id="dimGovernance" class="dim-select">
+              <option value="20">No active board or oversight, and unsure if filings/policies are current</option>
+              <option value="40">Board exists but is mostly inactive; filings or policies are often late or missing</option>
+              <option value="60" selected>Board meets regularly and reviews finances; core filings and basic policies are current</option>
+              <option value="80">Engaged board with committees and real strategic input; all filings current plus key policies (conflict of interest, whistleblower, records)</option>
+              <option value="95">Highly engaged, diverse board driving strategy and accountability; fully current on all filings with annual policy review</option>
             </select>
           </div>
         </div>
@@ -312,18 +301,18 @@
         <input id="funderApproach" placeholder="Traditional institutional funder, requires audited financials...">
         <p class="muted" style="margin-bottom:8px;">Weights (should add to roughly 100):</p>
         <div class="row3">
-          <div><label>Legal & Compliance</label><input id="wLegal" type="number" value="15"></div>
-          <div><label>Financial Health</label><input id="wFinancial" type="number" value="20"></div>
-          <div><label>Governance</label><input id="wGovernance" type="number" value="10"></div>
+          <div><label>Strategy and Positioning</label><input id="wStrategy" type="number" value="10"></div>
+          <div><label>Program and Impact Evidence</label><input id="wProgram" type="number" value="20"></div>
+          <div><label>Revenue and Financial Health</label><input id="wFinancial" type="number" value="20"></div>
         </div>
         <div class="row3">
-          <div><label>Strategic Clarity</label><input id="wStrategy" type="number" value="10"></div>
-          <div><label>Track Record</label><input id="wTrackRecord" type="number" value="15"></div>
-          <div><label>Outcome Measurement</label><input id="wOutcomes" type="number" value="15"></div>
+          <div><label>Leadership and Org. Capacity</label><input id="wLeadership" type="number" value="10"></div>
+          <div><label>Operations and Infrastructure</label><input id="wOperations" type="number" value="15"></div>
+          <div><label>Partnerships and Ecosystem</label><input id="wPartnerships" type="number" value="10"></div>
         </div>
         <div class="row3">
-          <div><label>Leadership Stability</label><input id="wLeadership" type="number" value="5"></div>
-          <div><label>Reporting Capacity</label><input id="wReporting" type="number" value="10"></div>
+          <div><label>Governance and Risk</label><input id="wGovernance" type="number" value="15"></div>
+          <div></div>
           <div></div>
         </div>
         <p class="status-msg" id="weightTotal" style="margin-top:-4px;"></p>
@@ -344,28 +333,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const RUBRIC = [
-  { key:'legal', name:'Legal & Compliance', weight:15 },
-  { key:'financial', name:'Financial Health', weight:20 },
-  { key:'governance', name:'Governance', weight:10 },
-  { key:'strategy', name:'Strategic Clarity', weight:10 },
-  { key:'trackRecord', name:'Track Record', weight:15 },
-  { key:'outcomes', name:'Outcome Measurement', weight:15 },
-  { key:'leadership', name:'Leadership Stability', weight:5 },
-  { key:'reporting', name:'Reporting Capacity', weight:10 },
+  { key:'strategy', name:'Strategy and Positioning', weight:10 },
+  { key:'program', name:'Program and Impact Evidence', weight:20 },
+  { key:'financial', name:'Revenue and Financial Health', weight:20 },
+  { key:'leadership', name:'Leadership and Organizational Capacity', weight:10 },
+  { key:'operations', name:'Operations and Infrastructure', weight:15 },
+  { key:'partnerships', name:'Partnerships and Ecosystem', weight:10 },
+  { key:'governance', name:'Governance and Risk', weight:15 },
 ];
 
 const SAMPLE_SCORE = {
   overall: 85.8,
   status: 'Ready',
   dimensions: [
-    { name: 'Legal & Compliance', score: 90, level: 'green' },
-    { name: 'Financial Health', score: 86, level: 'green' },
-    { name: 'Governance', score: 85, level: 'green' },
-    { name: 'Strategic Clarity', score: 80, level: 'green' },
-    { name: 'Track Record', score: 88, level: 'green' },
-    { name: 'Outcome Measurement', score: 82, level: 'green' },
-    { name: 'Leadership Stability', score: 78, level: 'yellow' },
-    { name: 'Reporting Capacity', score: 92, level: 'green' },
+    { name: 'Strategy and Positioning', score: 80, level: 'green' },
+    { name: 'Program and Impact Evidence', score: 86, level: 'green' },
+    { name: 'Revenue and Financial Health', score: 88, level: 'green' },
+    { name: 'Leadership and Organizational Capacity', score: 78, level: 'yellow' },
+    { name: 'Operations and Infrastructure', score: 92, level: 'green' },
+    { name: 'Partnerships and Ecosystem', score: 82, level: 'green' },
+    { name: 'Governance and Risk', score: 90, level: 'green' },
   ],
 };
 
@@ -846,13 +833,12 @@ function collectFinancialsBody() {
 
 function collectDimensionsBody() {
   return {
-    legal: Number(document.getElementById('dimLegal').value),
-    governance: Number(document.getElementById('dimGovernance').value),
     strategy: Number(document.getElementById('dimStrategy').value),
-    trackRecord: Number(document.getElementById('dimTrackRecord').value),
-    outcomes: Number(document.getElementById('dimOutcomes').value),
+    program: Number(document.getElementById('dimProgram').value),
     leadership: Number(document.getElementById('dimLeadership').value),
-    reporting: Number(document.getElementById('dimReporting').value),
+    operations: Number(document.getElementById('dimOperations').value),
+    partnerships: Number(document.getElementById('dimPartnerships').value),
+    governance: Number(document.getElementById('dimGovernance').value),
   };
 }
 
@@ -1051,7 +1037,7 @@ document.getElementById('addReportBtn').addEventListener('click', async () => {
 });
 
 // ---------- WEIGHT TOTAL (live feedback) ----------
-const WEIGHT_IDS = ['wLegal', 'wFinancial', 'wGovernance', 'wStrategy', 'wTrackRecord', 'wOutcomes', 'wLeadership', 'wReporting'];
+const WEIGHT_IDS = ['wStrategy', 'wProgram', 'wFinancial', 'wLeadership', 'wOperations', 'wPartnerships', 'wGovernance'];
 function updateWeightTotal() {
   const el = document.getElementById('weightTotal');
   if (!el) return;
@@ -1116,8 +1102,8 @@ document.getElementById('createFunderBtn').addEventListener('click', async () =>
   if (!name) { statusEl.className = 'status-msg error'; statusEl.textContent = 'Name is required.'; return; }
   const weights = {};
   RUBRIC.forEach(r => {
-    const idMap = { legal:'wLegal', financial:'wFinancial', governance:'wGovernance', strategy:'wStrategy',
-      trackRecord:'wTrackRecord', outcomes:'wOutcomes', leadership:'wLeadership', reporting:'wReporting' };
+    const idMap = { strategy:'wStrategy', program:'wProgram', financial:'wFinancial',
+      leadership:'wLeadership', operations:'wOperations', partnerships:'wPartnerships', governance:'wGovernance' };
     weights[r.name] = Number(document.getElementById(idMap[r.key]).value) || 0;
   });
   try {

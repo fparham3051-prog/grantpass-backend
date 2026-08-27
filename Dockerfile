@@ -1,13 +1,12 @@
-# No dependencies to install - pure Python stdlib - so this image is tiny
-# and the build is just a file copy.
+# Postgres (Neon) needs psycopg2-binary - see db.py and requirements.txt.
 FROM python:3.11-slim
 
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV PORT=8420
-ENV GRANTPASS_DB=/app/data/grantpass.db
-RUN mkdir -p /app/data
 
 EXPOSE 8420
 CMD ["python3", "server.py"]
