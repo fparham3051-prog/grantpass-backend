@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 *.db
 *.db-journal
+
+# Neon CLI / local secrets
+.env
+.env.*
