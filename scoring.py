@@ -14,11 +14,20 @@ they default to a neutral 50 until scored, which is intentionally visible
 rather than silently assumed, matching the spec's own "0 = Not in place"
 versus "50 = Partial" evidence standard.
 
-The authenticated /orgs flow (Console) still only implements FUND end to
-end (organizations have no lifecycle-stage field yet - that's a real
-schema change, tracked as follow-up work, not done here). The public
-/demo/score endpoint accepts a `stage` argument and can score against any
-of the three.
+The authenticated /orgs flow (Console) is stage-aware end to end:
+organizations.stage and readiness_scores.stage (see db.py) carry an org's
+lifecycle stage through creation, scoring, and history, and score_org()
+(server.py) scores against whichever of the three the org is actually in -
+not just FUND. The public /demo/score endpoint accepts a `stage` argument
+the same way, for a visitor who has no org yet.
+
+Every manually-entered dimension (POST /orgs/{id}/dimensions) can also
+carry the evidence that justifies its score - a note, and optionally a
+source - stored alongside it in manual_dimensions.evidence_json and
+surfaced by GET /orgs/{id}/full-report and GET /orgs/{id}/dimensions. A
+score with nothing behind it stays visibly unsupported in the Console's
+Evidence Vault view rather than reading the same as a well-documented one;
+that distinction is the point, not an edge case to paper over.
 """
 
 DIMENSIONS = [

@@ -321,7 +321,7 @@ const STAGE_LEDE = {
   SUSTAIN: "InstitutionalOS reads your operating evidence, economics, and leadership bench strength, scores your durability across the seven dimensions that predict whether an institution lasts, and shows what to repair first.",
 };
 
-let selectedStage = "BUILD";
+let selectedStage = "FUND";
 
 function renderDimsOverview() {
   const weights = STAGE_WEIGHTS[selectedStage];
@@ -347,7 +347,16 @@ document.querySelectorAll(".stage-tab").forEach(tab => {
   tab.addEventListener("click", () => setStage(tab.dataset.stage));
 });
 renderDimsOverview();
-setStage("BUILD");
+
+// Deep-linkable stage: /?stage=BUILD (or FUND / SUSTAIN) lets marketing
+// pages and the InstitutionalOS Console link straight into the matching
+// tab. Falls back to FUND — the stage most first-time visitors land here
+// for — when the param is absent or not one of the three known stages.
+const requestedStage = new URLSearchParams(window.location.search).get("stage");
+const initialStage = ["BUILD", "FUND", "SUSTAIN"].includes((requestedStage || "").toUpperCase())
+  ? requestedStage.toUpperCase()
+  : "FUND";
+setStage(initialStage);
 
 const SAMPLES = {
   riverside: "Riverside Community Kitchen has operated for 2 years providing free meals and job-readiness training to about 300 families a month in East Riverside. Annual budget is $180,000, with 78% coming from a single county grant renewed annually and the rest from small individual donations. We do not have audited financials, just a bookkeeper-prepared statement. We have about six weeks of operating reserves. Our board has 4 members who meet twice a year and there are no written bylaws yet. We track how many meals are served and how many people attend trainings, but we dont yet measure longer-term outcomes like job placement. We have no formal partnerships with other organizations.",

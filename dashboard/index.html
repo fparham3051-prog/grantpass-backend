@@ -44,6 +44,19 @@
   input, textarea, select { width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:14px; font-family:inherit; background:white; margin-bottom:12px; color:var(--ink); }
   input:focus, textarea:focus, select:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--accent-soft); }
   select.dim-select { font-size:12.5px; padding:9px 8px; }
+  textarea.dim-evidence { font-size:12px; padding:7px 9px; min-height:38px; margin-bottom:0; color:var(--ink-soft); resize:vertical; }
+  textarea.dim-evidence:placeholder-shown { background:var(--bg-soft); }
+
+  .evidence-vault { display:flex; flex-direction:column; gap:8px; }
+  .evidence-item { border:1px solid var(--line); border-radius:10px; padding:10px 14px; background:white; }
+  .evidence-item .ev-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .evidence-item .ev-name { font-weight:700; font-size:13px; color:var(--navy); }
+  .evidence-item .ev-score { font-size:12px; font-weight:800; }
+  .evidence-item .ev-body { font-size:12.5px; color:var(--ink-soft); margin-top:5px; line-height:1.5; }
+  .evidence-item .ev-body.empty { font-style:italic; }
+  .evidence-item .ev-source { display:inline-block; margin-top:4px; font-size:11.5px; }
+  .evidence-vault-group-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:700; margin:10px 0 2px; }
+  .evidence-vault-group-label:first-child { margin-top:0; }
   .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
   .status-msg { font-size:12.5px; color:var(--ink-soft); margin-top:8px; min-height:16px; }
@@ -81,6 +94,17 @@
   .banner { display:flex; align-items:center; gap:10px; background:var(--accent-soft); border:1px solid #E6D8B8; color:var(--gold-access); border-radius:12px; padding:11px 16px; font-size:12.5px; font-weight:600; margin-bottom:16px; }
   .banner .spinner { width:14px; height:14px; border-radius:50%; border:2px solid #E6D8B8; border-top-color:var(--gold-access); animation:spin .8s linear infinite; flex-shrink:0; }
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  .escalation-cta { display:flex; align-items:center; justify-content:space-between; gap:14px; border-radius:12px; padding:14px 18px; margin:4px 0 16px; flex-wrap:wrap; }
+  .escalation-cta.urgent { background:var(--red-bg); border:1px solid #E8B9B9; }
+  .escalation-cta.subtle { background:var(--bg-soft); border:1px solid var(--line); }
+  .escalation-cta .escalation-text { font-size:13px; line-height:1.45; max-width:420px; }
+  .escalation-cta.urgent .escalation-text { color:#8C2323; }
+  .escalation-cta.subtle .escalation-text { color:var(--ink-soft); }
+  .escalation-cta .escalation-text strong { display:block; font-size:14px; margin-bottom:2px; }
+  .escalation-cta.urgent .escalation-text strong { color:var(--red); }
+  .escalation-cta.subtle .escalation-text strong { color:var(--navy); }
+  .escalation-cta .btn { flex-shrink:0; }
 
   .sample-panel { margin-top:16px; }
   .sample-panel .score-hero, .sample-panel .dim-row { pointer-events:none; }
@@ -180,6 +204,14 @@
         <p class="hint">Readiness score (financial + manual dimensions) alongside this org's most recent Donor Sustainability &amp; Stewardship Assessment, if they've taken it.</p>
         <div id="fullReportResult"><p class="muted">Loading...</p></div>
 
+        <h3>Score History</h3>
+        <p class="hint">Every score you've saved for this org, oldest to newest, so you can see whether things are trending up.</p>
+        <div id="scoreHistoryResult"><p class="muted">Loading...</p></div>
+
+        <h3>Evidence Vault</h3>
+        <p class="hint">What backs every dimension score in one place &mdash; the filed financial data, the notes you enter below when scoring, and the Donor Sustainability assessment's written answers. "Claims cannot outrun evidence": a score with nothing behind it is flagged as unsupported here, not hidden.</p>
+        <div id="evidenceVaultResult"><p class="muted">Loading...</p></div>
+
         
 <h3>Share With a Funder</h3>
 <p class="hint">Generate a read-only link a funder can open without a GrantPass login. It shows your readiness score, donor sustainability summary, and compliance calendar &mdash; no internal notes.</p>
@@ -219,6 +251,7 @@
               <option value="80">Current strategic plan actively guides decisions</option>
               <option value="95">Strategic plan is current, well-communicated, and drives programs and budgeting</option>
             </select>
+            <textarea id="evStrategy" class="dim-evidence" rows="2" placeholder="Evidence (optional): what backs this? e.g. &quot;Board-approved 3-yr plan, March 2025 &mdash; drive.google.com/...&quot;"></textarea>
           </div>
           <div><label>Program and Impact Evidence</label>
             <select id="dimProgram" class="dim-select">
@@ -228,6 +261,7 @@
               <option value="80">3+ years of consistent delivery with systematic outcome tracking tied to program goals</option>
               <option value="95">Long, well-documented track record with robust outcome measurement and regular external reporting or evaluation</option>
             </select>
+            <textarea id="evProgram" class="dim-evidence" rows="2" placeholder="Evidence (optional): what backs this? e.g. outcome report, evaluation link, dates"></textarea>
           </div>
           <div><label>Leadership and Org. Capacity</label>
             <select id="dimLeadership" class="dim-select">
@@ -237,6 +271,7 @@
               <option value="80">Leadership stable for 3+ years, with a succession plan emerging</option>
               <option value="95">Long-tenured, stable leadership with a documented succession plan</option>
             </select>
+            <textarea id="evLeadership" class="dim-evidence" rows="2" placeholder="Evidence (optional): tenure dates, succession plan link, board minutes"></textarea>
           </div>
         </div>
         <div class="row3">
@@ -248,6 +283,7 @@
               <option value="80">Timely, detailed reporting including outcomes; documented workflows and a real system for tracking pipeline/deliverables</option>
               <option value="95">Real-time dashboards or proactive reporting; mature systems (CRM, document repository, QA) support delivery at scale</option>
             </select>
+            <textarea id="evOperations" class="dim-evidence" rows="2" placeholder="Evidence (optional): systems in use, reporting cadence, workflow docs"></textarea>
           </div>
           <div><label>Partnerships and Ecosystem</label>
             <select id="dimPartnerships" class="dim-select">
@@ -257,6 +293,7 @@
               <option value="80">Multiple active partnerships with signed MOUs or letters of commitment</option>
               <option value="95">A deliberate partnership strategy with named, actively stewarded relationships across funders/peers/referral sources</option>
             </select>
+            <textarea id="evPartnerships" class="dim-evidence" rows="2" placeholder="Evidence (optional): named partners, MOU links, referral relationships"></textarea>
           </div>
           <div><label>Governance and Risk</label>
             <select id="dimGovernance" class="dim-select">
@@ -266,6 +303,7 @@
               <option value="80">Engaged board with committees and real strategic input; all filings current plus key policies (conflict of interest, whistleblower, records)</option>
               <option value="95">Highly engaged, diverse board driving strategy and accountability; fully current on all filings with annual policy review</option>
             </select>
+            <textarea id="evGovernance" class="dim-evidence" rows="2" placeholder="Evidence (optional): board composition, filing dates, policy links"></textarea>
           </div>
         </div>
 
@@ -430,6 +468,7 @@ function renderScoreCard(data) {
     const openList = data.hardGate.open.map(g => `${DIM_NAMES[g.dimension] || g.dimension} (needs ${g.required}, at ${g.actual})`).join(', ');
     html += `<p class="status-msg error" style="margin-top:4px;">Hard gate open: ${openList}</p>`;
   }
+  html += renderEscalationCta(data);
   (data.dimensions || []).forEach(d => {
     html += `<div class="dim-row">
       <div>${d.name}</div>
@@ -438,6 +477,22 @@ function renderScoreCard(data) {
     </div>`;
   });
   return html;
+}
+
+function renderEscalationCta(data) {
+  const gateOpen = data.hardGate && data.hardGate.status === 'Open';
+  const belowThreshold = typeof data.overall === 'number' && data.overall < 75;
+  const urgent = gateOpen || belowThreshold;
+  const headline = gateOpen
+    ? "A hard gate is open on this score \u2014 that\u2019s worth a conversation, not just another self-service pass."
+    : belowThreshold
+      ? "Below the readiness threshold. A short call can pinpoint the fastest path through."
+      : "Gate cleared. A quick conversation can turn this score into a funded, staffed plan.";
+  return `
+    <div class="escalation-cta ${urgent ? 'urgent' : 'subtle'}">
+      <div class="escalation-text"><strong>Talk it through with Frankly Inspired</strong>${headline}</div>
+      <a class="btn btn-primary btn-sm" href="https://calendly.com/fparham/30min" target="_blank" rel="noopener">Schedule a Strategy Conversation</a>
+    </div>`;
 }
 
 function renderDonorCard(donor, orgName) {
@@ -472,9 +527,50 @@ function renderDonorCard(donor, orgName) {
   return html;
 }
 
+function renderEvidenceItem(name, score, level, evidence) {
+  const hasNote = evidence && (evidence.note || evidence.auto);
+  const scoreColor = score == null ? 'var(--ink-soft)' : levelColor(level || levelFromScore(score));
+  const scoreText = score == null ? '\u2014' : Math.round(score);
+  let body;
+  if (hasNote) {
+    body = `<div class="ev-body">${(evidence.note || '').replace(/</g, '&lt;')}</div>`;
+    if (evidence.source) {
+      const isUrl = /^https?:\/\//.test(evidence.source);
+      body += isUrl
+        ? `<a class="ev-source" href="${evidence.source}" target="_blank" rel="noopener">${evidence.source}</a>`
+        : `<div class="ev-source muted">${evidence.source}</div>`;
+    }
+    if (evidence.auto) {
+      body += `<div class="ev-source muted">Sourced automatically from ingested financial data.</div>`;
+    }
+  } else {
+    body = `<div class="ev-body empty">No evidence on file yet for this dimension \u2014 the score above is unsupported until something backs it.</div>`;
+  }
+  return `<div class="evidence-item">
+    <div class="ev-head"><span class="ev-name">${name}</span><span class="ev-score" style="color:${scoreColor}">${scoreText}</span></div>
+    ${body}
+  </div>`;
+}
+
+function renderEvidenceVault(readinessDims, donor) {
+  let html = '<div class="evidence-vault">';
+  html += '<div class="evidence-vault-group-label">Health Index Dimensions</div>';
+  html += (readinessDims || []).map(d => renderEvidenceItem(d.name, d.score, d.level, d.evidence)).join('');
+  if (donor && donor.hasData) {
+    html += '<div class="evidence-vault-group-label">Donor Sustainability &amp; Stewardship</div>';
+    html += donor.dimensions.map(d => renderEvidenceItem(
+      d.name, d.score, null, d.evidence ? { note: d.evidence } : null
+    )).join('');
+  }
+  html += '</div>';
+  return html;
+}
+
 async function loadFullReport(orgId, orgName) {
   const el = document.getElementById('fullReportResult');
+  const vaultEl = document.getElementById('evidenceVaultResult');
   el.innerHTML = '<p class="muted">Loading...</p>';
+  vaultEl.innerHTML = '<p class="muted">Loading...</p>';
   try {
     const data = await api('GET', `/orgs/${orgId}/full-report`);
     el.innerHTML = `
@@ -482,8 +578,10 @@ async function loadFullReport(orgId, orgName) {
         <div><h3 style="margin-top:0;">Readiness</h3>${renderScoreCard(data.readiness)}</div>
         <div><h3 style="margin-top:0;">Donor Sustainability</h3>${renderDonorCard(data.donorSustainability, orgName)}</div>
       </div>`;
+    vaultEl.innerHTML = renderEvidenceVault(data.readiness ? data.readiness.dimensions : [], data.donorSustainability);
   } catch (e) {
     el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+    vaultEl.innerHTML = '';
   }
 }
 
@@ -850,6 +948,8 @@ async function selectOrg(id) {
   document.getElementById('scoreResult').innerHTML = '';
 
   loadFullReport(id, org ? org.name : '');
+  loadScoreHistory(id);
+  loadDimensions(id);
 
   try {
     const snap = await api('GET', `/orgs/${id}/financial-snapshot`);
@@ -885,15 +985,47 @@ function collectFinancialsBody() {
   };
 }
 
+const DIM_EVIDENCE_FIELDS = {
+  strategy: ['dimStrategy', 'evStrategy'],
+  program: ['dimProgram', 'evProgram'],
+  leadership: ['dimLeadership', 'evLeadership'],
+  operations: ['dimOperations', 'evOperations'],
+  partnerships: ['dimPartnerships', 'evPartnerships'],
+  governance: ['dimGovernance', 'evGovernance'],
+};
+
 function collectDimensionsBody() {
-  return {
-    strategy: Number(document.getElementById('dimStrategy').value),
-    program: Number(document.getElementById('dimProgram').value),
-    leadership: Number(document.getElementById('dimLeadership').value),
-    operations: Number(document.getElementById('dimOperations').value),
-    partnerships: Number(document.getElementById('dimPartnerships').value),
-    governance: Number(document.getElementById('dimGovernance').value),
-  };
+  const scores = {};
+  const evidence = {};
+  Object.entries(DIM_EVIDENCE_FIELDS).forEach(([key, [scoreId, evId]]) => {
+    scores[key] = Number(document.getElementById(scoreId).value);
+    const note = document.getElementById(evId).value.trim();
+    if (note) evidence[key] = { note };
+  });
+  return { scores, evidence };
+}
+
+async function loadDimensions(orgId) {
+  try {
+    const data = await api('GET', `/orgs/${orgId}/dimensions`);
+    const scores = data.scores || {};
+    const evidence = data.evidence || {};
+    Object.entries(DIM_EVIDENCE_FIELDS).forEach(([key, [scoreId, evId]]) => {
+      const scoreEl = document.getElementById(scoreId);
+      const evEl = document.getElementById(evId);
+      if (key in scores) {
+        // Snap to the nearest rubric option rather than requiring an exact
+        // match, since a score saved before this vault existed (or entered
+        // some other way) may not land exactly on 20/40/60/80/95.
+        const options = Array.from(scoreEl.options).map(o => Number(o.value));
+        const nearest = options.reduce((a, b) => Math.abs(b - scores[key]) < Math.abs(a - scores[key]) ? b : a);
+        scoreEl.value = String(nearest);
+      } else {
+        scoreEl.selectedIndex = 2; // the rubric's built-in "60" default option
+      }
+      evEl.value = (evidence[key] && evidence[key].note) || '';
+    });
+  } catch (e) { /* non-fatal — form just keeps its defaults */ }
 }
 
 document.getElementById('saveFinancialsBtn').addEventListener('click', async () => {
@@ -916,6 +1048,8 @@ document.getElementById('saveDimsBtn').addEventListener('click', async () => {
     await api('POST', `/orgs/${selectedOrgId}/dimensions`, collectDimensionsBody());
     statusEl.className = 'status-msg ok';
     statusEl.textContent = 'Saved.';
+    const org = orgs.find(o => o.id === selectedOrgId);
+    loadFullReport(selectedOrgId, org ? org.name : '');
   } catch (e) {
     statusEl.className = 'status-msg error';
     statusEl.textContent = e.message;
@@ -940,6 +1074,7 @@ document.getElementById('saveAndScoreBtn').addEventListener('click', async () =>
     resultEl.innerHTML = renderScoreCard(data);
     const org = orgs.find(o => o.id === selectedOrgId);
     loadFullReport(selectedOrgId, org ? org.name : '');
+    loadScoreHistory(selectedOrgId);
   } catch (e) {
     statusEl.className = 'status-msg error';
     statusEl.textContent = e.message;
@@ -948,6 +1083,36 @@ document.getElementById('saveAndScoreBtn').addEventListener('click', async () =>
     btn.disabled = false;
   }
 });
+
+async function loadScoreHistory(orgId) {
+  const el = document.getElementById('scoreHistoryResult');
+  el.innerHTML = '<p class="muted">Loading...</p>';
+  try {
+    const data = await api('GET', `/orgs/${orgId}/score-history`);
+    const history = data.history || [];
+    if (history.length === 0) {
+      el.innerHTML = '<p class="muted">No scores saved yet \u2014 save financial data and dimensions, then score, to start a trend.</p>';
+      return;
+    }
+    if (history.length === 1) {
+      const h = history[0];
+      el.innerHTML = `<p class="muted">One score on record so far \u2014 ${new Date(h.computed_at).toLocaleDateString()}: <strong>${Math.round(h.overall)}</strong> (${h.status}, ${h.stage || 'FUND'} stage). Save another to see a trend.</p>`;
+      return;
+    }
+    const first = history[0].overall, last = history[history.length - 1].overall;
+    const delta = last - first;
+    const trendNote = delta > 0.5
+      ? `<span style="color:var(--green);font-weight:700;">+${delta.toFixed(1)}</span> since the first saved score`
+      : delta < -0.5
+        ? `<span style="color:var(--red);font-weight:700;">${delta.toFixed(1)}</span> since the first saved score`
+        : `Holding steady since the first saved score`;
+    el.innerHTML = `
+      <p class="muted" style="margin-bottom:10px;">${trendNote}</p>
+      ${history.map(h => `<div class="list-item"><strong>${new Date(h.computed_at).toLocaleDateString()}</strong> \u2014 ${Math.round(h.overall)} <span class="pill ${pillClass(levelFromScore(h.overall))}">${h.status}</span> <span class="muted">(${h.stage || 'FUND'} stage)</span></div>`).join('')}`;
+  } catch (e) {
+    el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
+  }
+}
 
 async function loadReports(orgId) {
   const el = document.getElementById('reportsList');

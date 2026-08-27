@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS readiness_scores (
 CREATE TABLE IF NOT EXISTS manual_dimensions (
     org_id INTEGER PRIMARY KEY REFERENCES organizations(id),
     dimensions_json TEXT NOT NULL,
+    evidence_json TEXT DEFAULT '{}',
     updated_at TEXT NOT NULL
 );
 
@@ -257,6 +258,7 @@ def init_db():
     conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
+    conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")
     conn.commit()
     conn.close()
 

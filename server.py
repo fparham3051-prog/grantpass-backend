@@ -68,15 +68,20 @@ def score_org(conn, org_id: int) -> dict:
         "SELECT * FROM financial_snapshots WHERE org_id=? ORDER BY ingested_at DESC LIMIT 1", (org_id,)
     ).fetchone()
     manual_row = conn.execute(
-        "SELECT dimensions_json FROM manual_dimensions WHERE org_id=?", (org_id,)
+        "SELECT dimensions_json, evidence_json FROM manual_dimensions WHERE org_id=?", (org_id,)
     ).fetchone()
 
     manual_dims = {}
+    manual_evidence = {}
     if manual_row:
         try:
             manual_dims = json.loads(manual_row["dimensions_json"])
         except Exception:
             manual_dims = {}
+        try:
+            manual_evidence = json.loads(manual_row["evidence_json"] or "{}")
+        except Exception:
+            manual_evidence = {}
 
     fin_score, fin_note = scoring.score_financial_health(dict(snapshot) if snapshot else None)
 
@@ -85,15 +90,22 @@ def score_org(conn, org_id: int) -> dict:
     for d in scoring.rubric_for(stage):
         if d["key"] == "financial":
             sc, note = fin_score, fin_note
+            # Financial is the one dimension the vault fills in for free: the
+            # deterministic note IS the evidence, sourced straight from
+            # ingested filing data rather than someone's say-so.
+            evidence = {"note": fin_note, "source": "Filed financial data" if snapshot else None, "auto": True}
         elif d["key"] in manual_dims:
             sc, note = manual_dims[d["key"]], "Manually entered / externally scored."
+            evidence = manual_evidence.get(d["key"]) or {}
         else:
             sc, note = 50, "No data yet for this dimension — neutral default."
+            evidence = {}
         dim_scores[d["key"]] = sc
         dims.append({
             "name": d["name"], "weight": d["weight"], "score": sc,
             "level": scoring.level_for(sc), "note": note,
             "liftTarget": scoring.lift_target(sc),
+            "evidence": evidence,
         })
 
     overall = scoring.compute_overall(dim_scores, stage)
@@ -183,10 +195,16 @@ class Handler(BaseHTTPRequestHandler):
             m = re.match(r"^/orgs/(\d+)/dimensions$", path)
             if m and method == "POST":
                 return self._set_dimensions(int(m.group(1)))
+            if m and method == "GET":
+                return self._get_dimensions(int(m.group(1)))
 
             m = re.match(r"^/orgs/(\d+)/score$", path)
             if m and method == "GET":
                 return self._get_score(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/score-history$", path)
+            if m and method == "GET":
+                return self._get_score_history(int(m.group(1)))
 
             m = re.match(r"^/orgs/(\d+)/full-report$", path)
             if m and method == "GET":
@@ -429,25 +447,67 @@ class Handler(BaseHTTPRequestHandler):
 
     def _set_dimensions(self, org_id):
         """Manual (or future LLM-sourced) scores for the 6 non-financial FUND
-        dimensions. Body: {"strategy": 70, "program": 55, "leadership": 75,
-        "operations": 90, "partnerships": 60, "governance": 80}"""
+        dimensions, each backed by the evidence that justifies picking that
+        score rather than the score standing alone. Body:
+        {"scores": {"strategy": 70, "program": 55, "leadership": 75,
+                     "operations": 90, "partnerships": 60, "governance": 80},
+         "evidence": {"strategy": {"note": "Board-approved 3-year plan,
+                       adopted March 2025", "source": "https://drive.google.com/..."},
+                      ...}}
+        evidence is optional per dimension and per field - a missing key just
+        means no evidence is on file yet for that dimension. Also accepts the
+        old flat body shape ({"strategy": 70, ...}, no evidence) for
+        backward compatibility."""
         user_id = get_auth_user(self)
         if not user_id:
             return json_response(self, 401, {"error": "auth required"})
         data = self._read_json()
+        scores = data.get("scores") if isinstance(data.get("scores"), dict) else data
+        evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
         conn = db.get_conn()
         org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
         if not org:
             conn.close()
             return json_response(self, 404, {"error": "org not found"})
         conn.execute(
-            "INSERT INTO manual_dimensions (org_id, dimensions_json, updated_at) VALUES (?,?,?) "
-            "ON CONFLICT(org_id) DO UPDATE SET dimensions_json=excluded.dimensions_json, updated_at=excluded.updated_at",
-            (org_id, json.dumps(data), db.now()),
+            "INSERT INTO manual_dimensions (org_id, dimensions_json, evidence_json, updated_at) VALUES (?,?,?,?) "
+            "ON CONFLICT(org_id) DO UPDATE SET dimensions_json=excluded.dimensions_json, "
+            "evidence_json=excluded.evidence_json, updated_at=excluded.updated_at",
+            (org_id, json.dumps(scores), json.dumps(evidence), db.now()),
         )
         conn.commit()
         conn.close()
-        return json_response(self, 200, {"saved": data})
+        return json_response(self, 200, {"saved": scores, "evidence": evidence})
+
+    def _get_dimensions(self, org_id):
+        """Read-side counterpart to POST /dimensions: this org's last saved
+        manual scores and evidence, so the Console can prefill the form and
+        the Evidence Vault view instead of always resetting to the rubric's
+        default option with nothing behind it."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        row = conn.execute(
+            "SELECT dimensions_json, evidence_json, updated_at FROM manual_dimensions WHERE org_id=?",
+            (org_id,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return json_response(self, 200, {"scores": {}, "evidence": {}, "updatedAt": None})
+        try:
+            scores = json.loads(row["dimensions_json"] or "{}")
+        except Exception:
+            scores = {}
+        try:
+            evidence = json.loads(row["evidence_json"] or "{}")
+        except Exception:
+            evidence = {}
+        return json_response(self, 200, {"scores": scores, "evidence": evidence, "updatedAt": row["updated_at"]})
 
     def _get_score(self, org_id):
         user_id = get_auth_user(self)
@@ -467,6 +527,26 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         return json_response(self, 200, result)
 
+    def _get_score_history(self, org_id):
+        """Read-side counterpart to GET /score: every past computed score for
+        this org, oldest first, so the Console can show a trend instead of
+        only ever the latest snapshot. readiness_scores has been an
+        append-only log all along (see db.py) - this just surfaces it."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        rows = conn.execute(
+            "SELECT overall, status, stage, computed_at FROM readiness_scores WHERE org_id=? ORDER BY computed_at ASC",
+            (org_id,),
+        ).fetchall()
+        conn.close()
+        return json_response(self, 200, {"history": [dict(r) for r in rows]})
+
     # Human-readable labels for the 8 donor-sustainability dimensions, in the
     # same order they appear on the Google Form (sections 2-9). Kept here
     # rather than in db.py since it's presentation-only, not schema.
@@ -480,6 +560,21 @@ class Handler(BaseHTTPRequestHandler):
         ("donor_data_maturity", "Donor Data Maturity"),
         ("early_warning_capacity", "Early-Warning Capacity"),
     ]
+
+    # DB column (snake_case) -> the camelCase key the Google Form's evidence_json
+    # blob uses for that same dimension (see _ingest_donor_sustainability).
+    # Lets the vault view show the freeform evidence text next to each rating
+    # instead of just the 1-5 number, without changing the ingest contract.
+    DONOR_EVIDENCE_KEYS = {
+        "grassroots_cultivation": "grassrootsCultivation",
+        "stewardship_infrastructure": "stewardshipInfrastructure",
+        "engagement_cadence": "engagementCadence",
+        "first_gift_follow_through": "firstGiftFollowThrough",
+        "ownership_clarity": "ownershipClarity",
+        "board_readiness": "boardReadiness",
+        "donor_data_maturity": "donorDataMaturity",
+        "early_warning_capacity": "earlyWarningCapacity",
+    }
 
     def _get_full_report(self, org_id):
         """Combined view for the dashboard: this org's GrantPass readiness
@@ -534,6 +629,7 @@ class Handler(BaseHTTPRequestHandler):
                     "key": col, "name": label,
                     "rating": latest[col],
                     "score": round((latest[col] - 1) / 4 * 100, 1) if latest[col] is not None else None,
+                    "evidence": donor["latest"]["evidence"].get(self.DONOR_EVIDENCE_KEYS.get(col, ""), ""),
                 }
                 for col, label in self.DONOR_DIMENSION_LABELS
             ]
