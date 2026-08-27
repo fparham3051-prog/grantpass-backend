@@ -9,3 +9,5 @@ __pycache__/
 .neon
 .apply_stage_patches.py.done
 node_modules/
+.inline_script_check.js
+.apply_dashboard_stage_patches.py.tmp

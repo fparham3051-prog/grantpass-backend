@@ -143,9 +143,16 @@
           <div class="dz-status" id="newOrgDzStatus"></div>
           <input type="file" id="newOrgFileInput" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt">
         </div>
-        <div class="row">
+        <div class="row3">
           <div><label>Name</label><input id="newOrgName" placeholder="Riverside Community Kitchen"></div>
           <div><label>EIN (optional)</label><input id="newOrgEin" placeholder="12-3456789"></div>
+          <div><label>Lifecycle Stage</label>
+            <select id="newOrgStage">
+              <option value="BUILD">BUILD — pre-launch / early formation</option>
+              <option value="FUND" selected>FUND — pursuing institutional funding</option>
+              <option value="SUSTAIN">SUSTAIN — established, focused on longevity</option>
+            </select>
+          </div>
         </div>
         <button class="btn btn-primary" id="createOrgBtn">Create Organization</button>
         <div class="status-msg" id="createOrgStatus"></div>
@@ -159,6 +166,15 @@
       <div class="panel hidden" id="orgDetailPanel">
         <button class="btn-link" id="backToOrgsBtn" style="margin-bottom:12px;">&larr; Back to Organizations</button>
         <h2 id="orgDetailName">—</h2>
+        <div style="display:flex;align-items:center;gap:8px;margin:-6px 0 16px;">
+          <label style="margin:0;font-weight:600;">Lifecycle Stage</label>
+          <select id="orgDetailStage">
+            <option value="BUILD">BUILD</option>
+            <option value="FUND">FUND</option>
+            <option value="SUSTAIN">SUSTAIN</option>
+          </select>
+          <span class="status-msg" id="orgStageStatus" style="margin:0;"></span>
+        </div>
 
         <h3>Full Report</h3>
         <p class="hint">Readiness score (financial + manual dimensions) alongside this org's most recent Donor Sustainability &amp; Stewardship Assessment, if they've taken it.</p>
@@ -342,6 +358,12 @@ const RUBRIC = [
   { key:'governance', name:'Governance and Risk', weight:15 },
 ];
 
+// Dimension display names are the same across all 3 lifecycle stages -
+// only the weights differ (see scoring.STAGE_WEIGHTS on the backend) - so
+// this key->name lookup built from the FUND-weighted RUBRIC above is safe
+// to reuse for BUILD/SUSTAIN results too, e.g. labeling hard-gate dimensions.
+const DIM_NAMES = Object.fromEntries(RUBRIC.map(r => [r.key, r.name]));
+
 const SAMPLE_SCORE = {
   overall: 85.8,
   status: 'Ready',
@@ -392,11 +414,22 @@ function pillClass(level) { return level === 'green' ? 'green' : level === 'yell
 
 function renderScoreCard(data) {
   const level = levelFromScore(data.overall);
-  let html = `
+  let html = '';
+  if (data.stage) {
+    html += `<div class="muted" style="margin-bottom:6px;">Scored against the <strong>${data.stage}</strong> stage rubric</div>`;
+  }
+  html += `
     <div class="score-hero" style="background:${level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)'}">
       <div class="score-num" style="color:${levelColor(level)}">${Math.round(data.overall)}</div>
       <div><strong>${data.status}</strong><br><span class="muted">Weighted overall readiness score</span></div>
     </div>`;
+  if (data.decisionBand && data.decisionBand.interpretation) {
+    html += `<p class="hint" style="margin-top:8px;"><strong>${data.decisionBand.interpretation}:</strong> ${data.decisionBand.decision} (band ${data.decisionBand.band})</p>`;
+  }
+  if (data.hardGate && data.hardGate.status === 'Open') {
+    const openList = data.hardGate.open.map(g => `${DIM_NAMES[g.dimension] || g.dimension} (needs ${g.required}, at ${g.actual})`).join(', ');
+    html += `<p class="status-msg error" style="margin-top:4px;">Hard gate open: ${openList}</p>`;
+  }
   (data.dimensions || []).forEach(d => {
     html += `<div class="dim-row">
       <div>${d.name}</div>
@@ -733,7 +766,7 @@ async function loadOrgs() {
     orgs.forEach(org => {
       const card = document.createElement('div');
       card.className = 'org-card' + (org.id === selectedOrgId ? ' selected' : '');
-      card.innerHTML = `<div class="name">${org.name}</div><div class="meta">${org.ein ? 'EIN ' + org.ein : 'No EIN on file'}</div>`;
+      card.innerHTML = `<div class="name">${org.name}</div><div class="meta">${org.stage || 'FUND'} &middot; ${org.ein ? 'EIN ' + org.ein : 'No EIN on file'}</div>`;
       card.addEventListener('click', () => selectOrg(org.id));
       listEl.appendChild(card);
     });
@@ -746,13 +779,32 @@ document.getElementById('backToOrgsBtn').addEventListener('click', () => {
   document.getElementById('orgListPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
+document.getElementById('orgDetailStage').addEventListener('change', async (e) => {
+  if (!selectedOrgId) return;
+  const newStage = e.target.value;
+  const statusEl = document.getElementById('orgStageStatus');
+  try {
+    await api('POST', `/orgs/${selectedOrgId}/stage`, { stage: newStage });
+    const org = orgs.find(o => o.id === selectedOrgId);
+    if (org) org.stage = newStage;
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Saved — rescoring…';
+    await loadFullReport(selectedOrgId, org ? org.name : '');
+    statusEl.textContent = 'Saved.';
+  } catch (err) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = err.message;
+  }
+});
+
 document.getElementById('createOrgBtn').addEventListener('click', async () => {
   const name = document.getElementById('newOrgName').value.trim();
   const ein = document.getElementById('newOrgEin').value.trim();
+  const stage = document.getElementById('newOrgStage').value;
   const statusEl = document.getElementById('createOrgStatus');
   if (!name) { statusEl.className = 'status-msg error'; statusEl.textContent = 'Name is required.'; return; }
   try {
-    await api('POST', '/orgs', { name, ein: ein || undefined });
+    await api('POST', '/orgs', { name, ein: ein || undefined, stage });
     statusEl.className = 'status-msg ok';
     statusEl.textContent = 'Created.';
     document.getElementById('newOrgName').value = '';
@@ -793,6 +845,8 @@ async function selectOrg(id) {
   const org = orgs.find(o => o.id === id);
   document.getElementById('orgDetailPanel').classList.remove('hidden');
   document.getElementById('orgDetailName').textContent = org ? org.name : 'Organization';
+  document.getElementById('orgDetailStage').value = (org && org.stage) || 'FUND';
+  document.getElementById('orgStageStatus').textContent = '';
   document.getElementById('scoreResult').innerHTML = '';
 
   loadFullReport(id, org ? org.name : '');
