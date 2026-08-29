@@ -259,6 +259,16 @@ def init_db():
     conn.executescript("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")
+    # Form 990 Part VI governance fields, added 2026-08-29 alongside
+    # parsing.py's governance parsing and scoring.score_governance_from_990().
+    # Same table as the financial columns since they come from the same
+    # ingested filing/snapshot event.
+    conn.executescript("ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS conflict_of_interest_policy BOOLEAN;")
+    conn.executescript("ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS whistleblower_policy BOOLEAN;")
+    conn.executescript("ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS document_retention_policy BOOLEAN;")
+    conn.executescript("ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS form_990_provided_to_board BOOLEAN;")
+    conn.executescript("ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS governing_body_voting_members INTEGER;")
+    conn.executescript("ALTER TABLE financial_snapshots ADD COLUMN IF NOT EXISTS independent_voting_members INTEGER;")
     conn.commit()
     conn.close()
 

@@ -85,6 +85,23 @@ def score_org(conn, org_id: int) -> dict:
 
     fin_score, fin_note = scoring.score_financial_health(dict(snapshot) if snapshot else None)
 
+    # Governance, added 2026-08-29: unlike Financial (always auto-scored,
+    # no manual path ever existed for it), Governance has been a manual-entry
+    # dimension since day one. So this only takes over from a manual entry
+    # when the ingested snapshot actually contains at least one of the six
+    # Form 990 Part VI signals - an org with no 990 governance data at all
+    # keeps its existing manual score (or the neutral-50 default) exactly as
+    # before, rather than being silently reset to neutral by this change.
+    GOVERNANCE_990_FIELDS = (
+        "conflict_of_interest_policy", "whistleblower_policy", "document_retention_policy",
+        "form_990_provided_to_board", "governing_body_voting_members", "independent_voting_members",
+    )
+    snapshot_dict = dict(snapshot) if snapshot else None
+    gov_has_990_data = bool(
+        snapshot_dict and any(snapshot_dict.get(k) is not None for k in GOVERNANCE_990_FIELDS)
+    )
+    gov_score, gov_note = scoring.score_governance_from_990(snapshot_dict if gov_has_990_data else None)
+
     dims = []
     dim_scores = {"financial": fin_score}
     for d in scoring.rubric_for(stage):
@@ -94,6 +111,9 @@ def score_org(conn, org_id: int) -> dict:
             # deterministic note IS the evidence, sourced straight from
             # ingested filing data rather than someone's say-so.
             evidence = {"note": fin_note, "source": "Filed financial data" if snapshot else None, "auto": True}
+        elif d["key"] == "governance" and gov_has_990_data:
+            sc, note = gov_score, gov_note
+            evidence = {"note": gov_note, "source": "Filed financial data (Form 990, Part VI)", "auto": True}
         elif d["key"] in manual_dims:
             sc, note = manual_dims[d["key"]], "Manually entered / externally scored."
             evidence = manual_evidence.get(d["key"]) or {}
@@ -120,6 +140,7 @@ def score_org(conn, org_id: int) -> dict:
         "dimensions": dims,
         "dimensionScores": dim_scores,
         "financialSourced": bool(snapshot),
+        "governanceSourced": gov_has_990_data,
     }
 
 class Handler(BaseHTTPRequestHandler):
@@ -383,12 +404,19 @@ class Handler(BaseHTTPRequestHandler):
         conn.execute(
             """INSERT INTO financial_snapshots
             (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
-             net_assets, contributions_revenue, program_revenue, ingested_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+             net_assets, contributions_revenue, program_revenue,
+             conflict_of_interest_policy, whistleblower_policy, document_retention_policy,
+             form_990_provided_to_board, governing_body_voting_members, independent_voting_members,
+             ingested_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 org_id, "990", parsed.get("tax_year"), parsed.get("total_revenue"), parsed.get("total_expenses"),
                 parsed.get("total_assets"), parsed.get("net_assets"), parsed.get("contributions_revenue"),
-                parsed.get("program_revenue"), db.now(),
+                parsed.get("program_revenue"),
+                parsed.get("conflict_of_interest_policy"), parsed.get("whistleblower_policy"),
+                parsed.get("document_retention_policy"), parsed.get("form_990_provided_to_board"),
+                parsed.get("governing_body_voting_members"), parsed.get("independent_voting_members"),
+                db.now(),
             ),
         )
         conn.commit()
@@ -433,12 +461,19 @@ class Handler(BaseHTTPRequestHandler):
         conn.execute(
             """INSERT INTO financial_snapshots
             (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
-             net_assets, contributions_revenue, program_revenue, ingested_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+             net_assets, contributions_revenue, program_revenue,
+             conflict_of_interest_policy, whistleblower_policy, document_retention_policy,
+             form_990_provided_to_board, governing_body_voting_members, independent_voting_members,
+             ingested_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 org_id, data.get("source", "bulk"), data.get("fiscal_year"), data.get("total_revenue"),
                 data.get("total_expenses"), data.get("total_assets"), data.get("net_assets"),
-                data.get("contributions_revenue"), data.get("program_revenue"), db.now(),
+                data.get("contributions_revenue"), data.get("program_revenue"),
+                data.get("conflict_of_interest_policy"), data.get("whistleblower_policy"),
+                data.get("document_retention_policy"), data.get("form_990_provided_to_board"),
+                data.get("governing_body_voting_members"), data.get("independent_voting_members"),
+                db.now(),
             ),
         )
         conn.commit()
