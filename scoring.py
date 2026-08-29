@@ -225,3 +225,89 @@ def hard_gate_check(dimension_scores: dict, stage: str = DEFAULT_STAGE) -> dict:
             "part of the full guided Review, not this self-service scorecard."
         ),
     }
+
+
+def score_governance_from_990(snapshot: dict | None):
+    """DRAFT rubric — not yet wired into score_org() or score_org's dims
+    list. Proposed 2026-08-29 alongside parsing.py's new Form 990 Part VI
+    fields, as a concrete first step on deepening the Form 990 moat leg
+    beyond Financial Health (see the SWAS/moat-strengthening discussion).
+    Every weight below is a starting proposal for Franklin to confirm or
+    adjust before this touches a live, paid diagnostic's Governance and
+    Risk score — mirrors score_financial_health()'s pattern otherwise:
+    real signals in, a defensible 0-100 out, neutral 50 default when
+    nothing's been ingested, same as every other unscored dimension.
+
+    Reads whichever of six optional snapshot keys are present (parsing.py
+    populates these from a filed 990's Part VI section when available;
+    None for any the filing didn't include, or wasn't parsed at all):
+      - conflict_of_interest_policy (bool)
+      - whistleblower_policy (bool)
+      - document_retention_policy (bool)
+      - form_990_provided_to_board (bool) — 990 reviewed by the full
+        governing body before filing, not just an officer
+      - governing_body_voting_members (int)
+      - independent_voting_members (int)
+
+    Scored only from whichever signals are actually present — the IRS
+    schema and what a given filer's software actually populates both
+    vary, so a field a filing doesn't report shouldn't silently count
+    against an organization, the same principle behind the neutral-50
+    default when there's no snapshot at all.
+    """
+    if not snapshot:
+        return 50, "No verified governance data ingested yet (POST /orgs/{id}/ingest-990) — neutral default."
+
+    # Proposed weights (sum to 100 when every signal is present). Policy
+    # weights are heavier than board-composition weights on the theory
+    # that a written policy is a clearer, more binary signal; board
+    # composition is scored as a ratio/scale rather than yes-or-no, so
+    # it's inherently softer evidence.
+    POLICY_FIELDS = {
+        "conflict_of_interest_policy": ("Conflict-of-interest policy", 20),
+        "whistleblower_policy": ("Whistleblower policy", 15),
+        "document_retention_policy": ("Document retention & destruction policy", 15),
+        "form_990_provided_to_board": ("Form 990 reviewed by full board before filing", 15),
+    }
+
+    earned = 0.0
+    possible = 0.0
+    notes = []
+    for key, (label, weight) in POLICY_FIELDS.items():
+        val = snapshot.get(key)
+        if val is None:
+            continue
+        possible += weight
+        if val:
+            earned += weight
+            notes.append(f"{label}: yes")
+        else:
+            notes.append(f"{label}: no")
+
+    voting = snapshot.get("governing_body_voting_members")
+    independent = snapshot.get("independent_voting_members")
+    if voting and voting > 0:
+        # Board independence: what fraction of voting members are
+        # independent (not compensated by the org, not related to staff).
+        independence_ratio = min(1.0, (independent or 0) / voting)
+        possible += 25
+        earned += independence_ratio * 25
+        notes.append(
+            f"Board independence: {independent}/{voting} voting members ({round(independence_ratio * 100)}%)"
+        )
+
+        # Board size: 5+ voting members is a commonly cited floor for
+        # effective nonprofit governance — a very small board concentrates
+        # decision risk the same way revenue concentration does for
+        # Financial Health.
+        possible += 10
+        size_score = min(1.0, voting / 5)
+        earned += size_score * 10
+        notes.append(f"Board size: {voting} voting members")
+
+    if possible == 0:
+        return 50, "990 filing ingested, but contained none of the governance fields this scorer reads — neutral default."
+
+    score = round((earned / possible) * 100)
+    note = "; ".join(notes) + " (from filed Form 990 data)"
+    return score, note
