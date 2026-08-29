@@ -27,12 +27,39 @@ FIELD_ALIASES = {
     "net_assets": ["NetAssetsOrFundBalancesEOYAmt", "TotalNetAssetsFundBalanceEOYAmt"],
     "contributions_revenue": ["CYContributionsGrantsAmt", "TotalContributionsAmt"],
     "program_revenue": ["CYProgramServiceRevenueAmt", "TotalProgramServiceRevenueAmt"],
+    # Part VI (Governance, Management, and Disclosure) fields - same e-file
+    # XML document as the financial fields above, just a different section.
+    # Added 2026-08-29 to explore extending the verified-990 pipeline beyond
+    # Financial Health into Governance and Risk (see moat-strengthening
+    # discussion). NOT yet wired into scoring.py - parsing only for now,
+    # pending a decision on how these should actually be weighted in a
+    # live, paid diagnostic. Like the rest of this file, untested against
+    # a real IRS filing (no outbound network access in this sandbox).
+    "conflict_of_interest_policy": ["ConflictOfInterestPolicyInd"],
+    "whistleblower_policy": ["WhistleblowerPolicyInd"],
+    "document_retention_policy": ["DocumentRetentionPolicyInd"],
+    "form_990_provided_to_board": ["Form990ProvidedToGoverningBodyInd"],
+    "governing_body_voting_members": ["GoverningBodyVotingMembersCnt"],
+    "independent_voting_members": ["VotingMembersIndependentCnt"],
 }
 
 NUMERIC_FIELDS = [
     "total_revenue", "total_expenses", "total_assets",
     "net_assets", "contributions_revenue", "program_revenue",
+    "governing_body_voting_members", "independent_voting_members",
 ]
+
+# IRS e-file XML represents Part VI yes/no checkboxes as boolean element text
+# ("true"/"false" in current schema versions; "1"/"0" and "X" appear in some
+# older or third-party-transmitted filings) - tolerant of all three, the same
+# spirit as this file's existing tag-name-alias tolerance.
+BOOLEAN_FIELDS = [
+    "conflict_of_interest_policy", "whistleblower_policy",
+    "document_retention_policy", "form_990_provided_to_board",
+]
+
+_TRUE_VALUES = {"true", "1", "x", "yes"}
+_FALSE_VALUES = {"false", "0", "no"}
 
 
 def _strip_ns(tag: str) -> str:
@@ -73,5 +100,17 @@ def parse_990_xml(xml_bytes: bytes) -> dict:
             result[key] = float(raw)
         except ValueError:
             result[key] = None
+
+    for key in BOOLEAN_FIELDS:
+        raw = result.get(key)
+        if raw is None:
+            continue
+        normalized = str(raw).strip().lower()
+        if normalized in _TRUE_VALUES:
+            result[key] = True
+        elif normalized in _FALSE_VALUES:
+            result[key] = False
+        else:
+            result[key] = None  # unrecognized value - don't guess
 
     return result
