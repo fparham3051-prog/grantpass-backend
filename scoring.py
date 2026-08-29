@@ -84,7 +84,28 @@ RUBRIC = rubric_for(DEFAULT_STAGE)
 
 
 def score_financial_health(snapshot: dict | None):
-    """Returns (score 0-100, human-readable note), computed from real numbers."""
+    """Returns (score 0-100, human-readable note), computed from real numbers.
+
+    Two optional snapshot keys extend this beyond pure 990 data, ported from
+    the free Revenue & Growth Score's own retention-rate logic and from the
+    wealth-transfer research brief (August 2026). Both default to None/False,
+    so scoring is byte-for-byte unchanged for any caller that doesn't supply
+    them:
+
+      - donor_retention_rate (0-100): the org's own last-year-donors-who-
+        gave-again percentage, the same input the free Revenue & Growth
+        Score collects and benchmarks against the Fundraising Effectiveness
+        Project's ~43% national average. When provided, it becomes a fourth
+        scored factor.
+      - major_gift_infrastructure (bool): True if the organization has
+        documented gift-acceptance/planned-giving infrastructure (a gift-
+        acceptance policy, ability to receive appreciated stock or DAF
+        grants, more than one identifiable major donor). When True, high
+        revenue concentration is treated as a well-supported major-gift
+        relationship rather than pure risk - the penalty is halved, not
+        removed, since concentration is still a real risk even when
+        supported.
+    """
     if not snapshot or snapshot.get("total_revenue") is None:
         return 50, "No verified financial data ingested yet (POST /orgs/{id}/ingest-990) — neutral default."
 
@@ -93,6 +114,8 @@ def score_financial_health(snapshot: dict | None):
     net_assets = snapshot.get("net_assets") or 0
     contributions = snapshot.get("contributions_revenue") or 0
     program = snapshot.get("program_revenue") or 0
+    donor_retention_rate = snapshot.get("donor_retention_rate")
+    major_gift_infrastructure = bool(snapshot.get("major_gift_infrastructure"))
 
     monthly_expenses = (expenses / 12) if expenses else 0
     reserve_months = (net_assets / monthly_expenses) if monthly_expenses > 0 else 0
@@ -100,15 +123,31 @@ def score_financial_health(snapshot: dict | None):
     concentration = (max(contributions, program) / revenue) if revenue > 0 else 0
 
     reserve_score = min(100, (reserve_months / 6) * 100)  # 6+ months reserves = full marks
-    concentration_score = 100 if concentration <= 0.5 else max(0, 100 - ((concentration - 0.5) / 0.5) * 100)
+    concentration_penalty = 0 if concentration <= 0.5 else ((concentration - 0.5) / 0.5) * 100
+    if major_gift_infrastructure:
+        concentration_penalty *= 0.5  # concentrated, but backed by real gift infrastructure
+    concentration_score = max(0, 100 - concentration_penalty)
     surplus_score = 100 if revenue >= expenses else max(0, 100 - ((expenses - revenue) / max(revenue, 1)) * 200)
 
-    score = round((reserve_score * 0.4) + (concentration_score * 0.35) + (surplus_score * 0.25))
+    if donor_retention_rate is not None:
+        # Benchmarked against the Fundraising Effectiveness Project's ~43%
+        # national average and the free Revenue & Growth Score's own bands
+        # (below 25% = weak, above 55% = strong retention).
+        retention_score = max(0, min(100, (donor_retention_rate / 55) * 100))
+        score = round(
+            (reserve_score * 0.30) + (concentration_score * 0.25)
+            + (surplus_score * 0.20) + (retention_score * 0.25)
+        )
+    else:
+        score = round((reserve_score * 0.4) + (concentration_score * 0.35) + (surplus_score * 0.25))
     score = max(0, min(100, score))
+
     note = (
         f"From filed financial data: ~{reserve_months:.1f} months of operating reserves, "
-        f"{concentration * 100:.0f}% revenue concentration in top source, "
-        f"{'surplus' if revenue >= expenses else 'deficit'} of ${abs(revenue - expenses):,.0f}."
+        f"{concentration * 100:.0f}% revenue concentration in top source"
+        + (" (offset — documented major-gift infrastructure on file)" if major_gift_infrastructure and concentration > 0.5 else "")
+        + f", {'surplus' if revenue >= expenses else 'deficit'} of ${abs(revenue - expenses):,.0f}"
+        + (f", ~{donor_retention_rate:.0f}% donor retention (national average ~43%)." if donor_retention_rate is not None else ".")
     )
     return score, note
 

@@ -144,6 +144,13 @@ def _score_program(text):
         else:
             score -= 5
             notes.append(f"only {years} years operating — limited outcome history so far")
+
+    if re.search(r"(publish|share)[^.]{0,40}(impact|outcome|result)|annual (impact )?report", text, re.I):
+        score += 10
+        notes.append("outcomes are communicated externally (impact report or similar), not just tracked internally")
+    elif re.search(r"(don'?t|do not|doesn'?t|no)[^.]{0,40}(publish|share)[^.]{0,20}(impact|outcome|result)", text, re.I):
+        score -= 10
+        notes.append("outcomes tracked but not communicated externally to donors")
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
 
 
@@ -181,6 +188,10 @@ def _score_financial(text):
         else:
             score += 15
             notes.append(f"~{reserves:.1f} months of operating reserves (healthy)")
+
+    if re.search(r"(monthly|recurring) (donor|giving|gift)s?|sustainer program", text, re.I):
+        score += 10
+        notes.append("recurring/monthly giving program mentioned — measurably stickier revenue than one-time gifts")
 
     if not notes:
         notes.append("no financial detail (reserves, concentration, audit status) found in the description")
@@ -229,6 +240,9 @@ def _score_operations(text):
     if system:
         score += 10
         notes.append("grants management system/CRM mentioned")
+    if re.search(r"gift acceptance policy|accept(?:s|ing)? (?:appreciated )?stock|donor.advised fund grants?|\bqcd\b|planned giving program", text, re.I):
+        score += 10
+        notes.append("complex/planned-gift acceptance capability mentioned (stock, DAF, or gift-acceptance policy)")
     if not notes:
         notes.append("no reporting process or grants-tracking system details found in the description")
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
@@ -237,7 +251,11 @@ def _score_operations(text):
 def _score_partnerships(text):
     """Partnerships and Ecosystem: funder relationship strategy, MOUs and
     letters of commitment, referral/philanthropic ecosystem, corporate vs.
-    public vs. philanthropic portfolio thinking."""
+    public vs. philanthropic portfolio thinking. Also checks two signals
+    added from the free Institutional Advancement Score's own research
+    (Cornell moves-management framework; wealth-transfer research on
+    advisor/DAF-sponsor referral relationships) - see the August 2026
+    research briefs."""
     score, notes = 50, []
     if re.search(r"\b(partner|partnership|mou|memorandum of understanding|coalition|collaborat\w*|referral)\b", text, re.I):
         score += 15
@@ -245,6 +263,12 @@ def _score_partnerships(text):
     if re.search(r"(no|not|without)[^.]{0,30}(partner|partnership)", text, re.I):
         score -= 15
         notes.append("explicitly no partnership relationships mentioned")
+    if re.search(r"moves management|donor pipeline|donor stages?|(identification|qualification|cultivation|solicitation)[^.]{0,40}stewardship", text, re.I):
+        score += 15
+        notes.append("moves-management/donor-pipeline stages mentioned")
+    if re.search(r"donor.advised fund|\bdafs?\b|financial advisor|estate attorney|estate planner|community foundation", text, re.I):
+        score += 10
+        notes.append("professional-advisor or DAF-sponsor relationships mentioned")
     if not notes:
         notes.append("no partnership or ecosystem relationships found in the description")
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
