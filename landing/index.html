@@ -141,7 +141,7 @@
 </head>
 <body>
 
-<div class="breadcrumb"><div class="wrap">Part of <a href="https://frankly-inspired-website-astro.pages.dev">Frankly Inspired and Associates, LLC</a></div></div>
+<div class="breadcrumb"><div class="wrap">Part of <a href="https://frankly-inspired-website-astro.onrender.com">Frankly Inspired and Associates, LLC</a></div></div>
 
 <header>
   <div class="wrap">
@@ -149,7 +149,7 @@
     <nav>
       <a href="#how">How it works</a>
       <a href="#demo">Free Scorecard</a>
-      <a href="https://frankly-inspired-website-astro.pages.dev/assessment">Self-Assessment</a>
+      <a href="https://frankly-inspired-website-astro.onrender.com/assessment">Self-Assessment</a>
       <a href="#demo" class="btn btn-primary">Score My Org</a>
     </nav>
   </div>
@@ -279,7 +279,7 @@
       <h3>Want the full guided Review?</h3>
       <p>This free scorecard is the self-service read. The full Review is a guided diagnostic where Franklin scores your organization directly — Revenue and Financial Health pulled from your actual filed Form 990 data, a written rationale behind every dimension, and (for FUND) a weighted ranking against the specific funders you're targeting.</p>
       <div class="hero-ctas">
-        <a class="btn btn-primary" href="https://frankly-inspired-website-astro.pages.dev/#pricing">See Pricing</a>
+        <a class="btn btn-primary" href="https://frankly-inspired-website-astro.onrender.com/#pricing">See Pricing</a>
         <a class="btn btn-ghost" href="https://calendly.com/fparham/30min" target="_blank" rel="noopener">Schedule a Conversation</a>
       </div>
     </div>
@@ -289,12 +289,13 @@
 <footer>
   <div class="wrap">
     InstitutionalOS is a diagnostic tool from Frankly Inspired and Associates, LLC. Scores are estimates for illustration and are not a substitute for a funder's actual review, financial advice, or legal advice.
-    <br>© 2026 Frankly Inspired and Associates, LLC · <a href="https://frankly-inspired-website-astro.pages.dev">franklyinspired.associates</a>
+    <br>© 2026 Frankly Inspired and Associates, LLC · <a href="https://frankly-inspired-website-astro.onrender.com">franklyinspired.associates</a>
   </div>
 </footer>
 
 <script>
-const API_BASE = "https://grantpass-backend-600997839134.us-central1.run.app";
+const API_BASE = "https://grantpass-backend.onrender.com";
+const CONSULTING_BASE = "https://frankly-inspired-website-astro.onrender.com";
 
 const STAGE_WEIGHTS = {
   BUILD:   { strategy:20, program:15, financial:10, leadership:15, operations:10, partnerships:10, governance:20 },
@@ -451,6 +452,30 @@ function renderResult(data) {
   });
 
   document.getElementById("result").classList.add("show");
+  renderScoreRefCta(data);
+}
+
+// Carries a completed scorecard's stage/score/band into the consulting
+// site's contact form via a signed token from the backend (score_ref) -
+// so a visitor doesn't have to re-explain their result when they reach
+// out. See auth.py's make_score_ref for the signing side.
+function renderScoreRefCta(data) {
+  const containerId = "scoreRefCta";
+  let el = document.getElementById(containerId);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = containerId;
+    el.className = "score-ref-cta";
+    document.getElementById("result").appendChild(el);
+  }
+  if (!data.score_ref) {
+    el.innerHTML = "";
+    return;
+  }
+  const stage = encodeURIComponent(data.stage || selectedStage);
+  const ref = encodeURIComponent(data.score_ref);
+  const url = `${CONSULTING_BASE}/?score_ref=${ref}&stage=${stage}#contact`;
+  el.innerHTML = `<p>Want Franklin to see this exact result? <a class="btn btn-primary" href="${url}">Continue to a Conversation &rarr;</a><br><span style="font-size:13px;color:#6b7480;">Your score carries over automatically, no need to re-explain it.</span></p>`;
 }
 </script>
 

@@ -953,6 +953,8 @@ class Handler(BaseHTTPRequestHandler):
             )
         description = description[: demo_scoring.MAX_CHARS]
         result = demo_scoring.score_description(description, stage)
+        band_label = (result.get("decisionBand") or {}).get("interpretation") or result.get("status")
+        result["score_ref"] = auth.make_score_ref(stage=stage, score=result["overall"], band=band_label, source="demo")
         conn = db.get_conn()
         conn.execute(
             "INSERT INTO demo_score_log (overall, dimensions_json, method, stage, created_at) VALUES (?,?,?,?,?)",

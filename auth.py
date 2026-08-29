@@ -58,3 +58,53 @@ def verify_token(token: str):
         return int(user_id)
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# score_ref: signed handoff token from a completed free scorecard (this
+# service) to the consulting site's contact form (frankly-inspired-backend,
+# a separate Node service). This is the integration piece from the August
+# 2026 wealth-transfer research brief ("the three touchpoints don't share
+# state") - a visitor's stage/score/band now follows them into the contact
+# form instead of them re-explaining their diagnostic from scratch.
+#
+# Token format: "<base64url(JSON payload, no padding)>.<hex HMAC-SHA256 sig>".
+# frankly-inspired-backend verifies this independently in Node
+# (scoreRef.js) using the SAME SCORE_REF_SECRET value - set it identically
+# on both services' environment variables, or every token will fail
+# verification on the receiving end.
+SCORE_REF_SECRET = os.environ.get("SCORE_REF_SECRET", "dev-score-ref-secret-change-me-in-production")
+SCORE_REF_TTL_SECONDS = 60 * 60 * 24 * 14  # 14 days - long enough for a visitor to come back later
+
+
+def make_score_ref(stage: str, score, band: str, source: str = "demo", ttl_seconds: int = SCORE_REF_TTL_SECONDS) -> str:
+    import json
+    payload = {
+        "stage": stage,
+        "score": round(score) if isinstance(score, (int, float)) else None,
+        "band": band,
+        "src": source,
+        "exp": int(time.time()) + ttl_seconds,
+    }
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    payload_b64 = base64.urlsafe_b64encode(payload_json.encode()).rstrip(b"=").decode()
+    sig = hmac.new(SCORE_REF_SECRET.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
+def verify_score_ref(token: str):
+    """Returns the decoded {stage, score, band, src, exp} dict if the token
+    is validly signed and unexpired, else None."""
+    import json
+    try:
+        payload_b64, sig = token.rsplit(".", 1)
+        expected_sig = hmac.new(SCORE_REF_SECRET.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected_sig, sig):
+            return None
+        padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+        if payload.get("exp", 0) < time.time():
+            return None
+        return payload
+    except Exception:
+        return None
