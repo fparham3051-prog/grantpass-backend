@@ -182,6 +182,23 @@ CREATE TABLE IF NOT EXISTS demo_score_log (
     dimensions_json TEXT,
     method TEXT,
     stage TEXT DEFAULT 'FUND',
+    org_name TEXT,
+    email TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Lightweight funnel instrumentation from the public marketing page: page
+-- loads, which lifecycle stage a visitor picks, and clicks on the two
+-- bottom-of-page CTAs (See Pricing / Schedule a Conversation). No free
+-- text, no PII - just enough to tell which stage actually gets picked and
+-- how far people get, which is the real product-market-fit signal the
+-- page had no way to produce before. demo_score_log_id optionally links a
+-- CTA click back to the specific completed score that led to it.
+CREATE TABLE IF NOT EXISTS funnel_events (
+    id SERIAL PRIMARY KEY,
+    event TEXT NOT NULL,
+    stage TEXT,
+    demo_score_log_id INTEGER,
     created_at TEXT NOT NULL
 );
 """
@@ -256,6 +273,13 @@ def init_db():
     # migration dance is needed here the way SQLite would have required -
     # this is a no-op once the column exists.
     conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
+    # Optional org name (already collected on the form, previously never
+    # sent) and optional email (captured after the result renders, via a
+    # soft, dismissible "email me this" prompt - never required, never
+    # gates the score itself). Both nullable: the anonymous free scorecard
+    # keeps working exactly as before for anyone who skips them.
+    conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS org_name TEXT;")
+    conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS email TEXT;")
     conn.executescript("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")
