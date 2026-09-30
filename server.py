@@ -39,6 +39,17 @@ def get_auth_user(handler):
         return None
     return auth.verify_token(header[7:])
 
+def check_admin_secret(handler) -> bool:
+    """Shared-secret check for practice-internal reporting endpoints (the
+    funnel summary), same pattern as check_ingest_secret below. Set
+    GRANTPASS_ADMIN_SECRET on the server and pass the same value as the
+    X-Admin-Secret header when reading /demo/funnel-summary."""
+    expected = os.environ.get("GRANTPASS_ADMIN_SECRET")
+    if not expected:
+        return False
+    provided = handler.headers.get("X-Admin-Secret", "")
+    return hmac_compare(provided, expected)
+
 def check_ingest_secret(handler) -> bool:
     """Shared-secret check for the Apps Script -> backend webhook. Separate
     from user Bearer auth: the Form has no logged-in GrantPass user behind
@@ -260,6 +271,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._demo_score()
             if path == "/demo/benchmarks" and method == "GET":
                 return self._demo_benchmarks()
+            if path == "/demo/lead" and method == "POST":
+                return self._demo_lead()
+            if path == "/demo/event" and method == "POST":
+                return self._demo_event()
+            if path == "/demo/funnel-summary" and method == "GET":
+                return self._demo_funnel_summary()
 
             m = re.match(r"^/funders/(\d+)/rank$", path)
             if m and method == "GET":
@@ -978,6 +995,7 @@ class Handler(BaseHTTPRequestHandler):
         paragraph becomes dimension scores)."""
         data = self._read_json()
         description = (data.get("description") or "").strip()
+        org_name = (data.get("orgName") or "").strip()[:200]
         stage = (data.get("stage") or scoring.DEFAULT_STAGE).strip().upper()
         if stage not in scoring.STAGE_WEIGHTS:
             stage = scoring.DEFAULT_STAGE
@@ -991,10 +1009,12 @@ class Handler(BaseHTTPRequestHandler):
         band_label = (result.get("decisionBand") or {}).get("interpretation") or result.get("status")
         result["score_ref"] = auth.make_score_ref(stage=stage, score=result["overall"], band=band_label, source="demo")
         conn = db.get_conn()
-        conn.execute(
-            "INSERT INTO demo_score_log (overall, dimensions_json, method, stage, created_at) VALUES (?,?,?,?,?)",
-            (result["overall"], json.dumps(result["dimensions"]), result["method"], stage, db.now()),
+        cur = conn.execute(
+            "INSERT INTO demo_score_log (overall, dimensions_json, method, stage, org_name, created_at) VALUES (?,?,?,?,?,?) RETURNING id",
+            (result["overall"], json.dumps(result["dimensions"]), result["method"], stage, org_name or None, db.now()),
         )
+        log_row = cur.fetchone()
+        result["demoScoreLogId"] = log_row["id"] if log_row else None
         conn.commit()
         conn.close()
         return json_response(self, 200, result)
@@ -1036,6 +1056,94 @@ class Handler(BaseHTTPRequestHandler):
                 counts[d["key"]] = counts.get(d["key"], 0) + 1
         dim_avgs = {k: round(sums[k] / counts[k], 1) for k in sums}
         return json_response(self, 200, {"count": count, "averageOverall": avg_overall, "dimensionAverages": dim_avgs})
+
+    def _demo_lead(self):
+        """Optional, non-blocking email capture shown after a free
+        scorecard result renders: 'want this emailed to you, or a link to
+        come back to it later'. Attaches an email address to an
+        already-logged demo_score_log row by id. Never required, never
+        gates the score itself - a visitor who skips this still has their
+        full result on screen."""
+        data = self._read_json()
+        log_id = data.get("demoScoreLogId")
+        email = (data.get("email") or "").strip().lower()
+        if not isinstance(log_id, int) or "@" not in email or len(email) > 254:
+            return json_response(self, 400, {"error": "a valid demoScoreLogId and email are required"})
+        conn = db.get_conn()
+        conn.execute("UPDATE demo_score_log SET email=? WHERE id=?", (email, log_id))
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"ok": True})
+
+    DEMO_EVENT_TYPES = {"page_view", "stage_selected", "cta_pricing", "cta_schedule"}
+
+    def _demo_event(self):
+        """Lightweight funnel-instrumentation beacon from the public
+        marketing page: page loads, which lifecycle stage a visitor picks,
+        and clicks on the two bottom-of-page CTAs (See Pricing / Schedule a
+        Conversation). No free text, no PII - just enough to answer which
+        stage actually gets picked and how far people get, the real
+        product-market-fit signal the page had no way to produce before."""
+        data = self._read_json()
+        event = (data.get("event") or "").strip()
+        if event not in self.DEMO_EVENT_TYPES:
+            return json_response(self, 400, {"error": "unrecognized event"})
+        stage = (data.get("stage") or "").strip().upper()
+        if stage not in scoring.STAGE_WEIGHTS:
+            stage = None
+        log_id = data.get("demoScoreLogId")
+        log_id = log_id if isinstance(log_id, int) else None
+        conn = db.get_conn()
+        conn.execute(
+            "INSERT INTO funnel_events (event, stage, demo_score_log_id, created_at) VALUES (?,?,?,?)",
+            (event, stage, log_id, db.now()),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"ok": True})
+
+    def _demo_funnel_summary(self):
+        """Practice-internal read: how the free scorecard funnel is
+        actually performing, by lifecycle stage - page views, stage picks,
+        completed scores, emails captured, and clicks on each bottom CTA.
+        Protected by a shared secret (X-Admin-Secret), not user Bearer
+        auth, since this reports on the practice's own marketing funnel,
+        not any one registered user's account."""
+        if not check_admin_secret(self):
+            return json_response(self, 401, {"error": "missing or invalid X-Admin-Secret"})
+        conn = db.get_conn()
+        event_rows = conn.execute(
+            "SELECT event, stage, COUNT(*) as n FROM funnel_events GROUP BY event, stage"
+        ).fetchall()
+        score_rows = conn.execute(
+            "SELECT stage, COUNT(*) as n, COUNT(email) as with_email FROM demo_score_log GROUP BY stage"
+        ).fetchall()
+        conn.close()
+
+        summary = {}
+
+        def bucket(stage_key):
+            key = stage_key or "UNKNOWN"
+            return summary.setdefault(key, {
+                "pageViews": 0, "stageSelected": 0, "scoresCompleted": 0,
+                "emailsCaptured": 0, "ctaPricingClicks": 0, "ctaScheduleClicks": 0,
+            })
+
+        for r in event_rows:
+            b = bucket(r["stage"])
+            if r["event"] == "page_view":
+                b["pageViews"] += r["n"]
+            elif r["event"] == "stage_selected":
+                b["stageSelected"] += r["n"]
+            elif r["event"] == "cta_pricing":
+                b["ctaPricingClicks"] += r["n"]
+            elif r["event"] == "cta_schedule":
+                b["ctaScheduleClicks"] += r["n"]
+        for r in score_rows:
+            b = bucket(r["stage"])
+            b["scoresCompleted"] += r["n"]
+            b["emailsCaptured"] += r["with_email"]
+        return json_response(self, 200, {"byStage": summary})
 
     # ---------- compliance calendar ----------
     def _list_compliance(self, org_id):
