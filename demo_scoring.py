@@ -415,9 +415,21 @@ def heuristic_dimension_scores(text: str) -> dict:
 
 CLAUDE_PROMPT = """You are scoring a nonprofit organization's grant readiness (the FUND stage \
 of the InstitutionalOS Health Index Engine) from a single self-description. Score each of \
-these 7 dimensions from 0-100, based ONLY on what the description actually states. If the \
-description doesn't mention something relevant to a dimension, score it 50 and say so in the \
-note - never invent facts, numbers, or claims the description doesn't contain.
+these 7 dimensions from 0-100, based ONLY on facts the description actually states - never \
+invent facts, numbers, or claims the description doesn't contain.
+
+Reason from the facts given, even when the description doesn't use the dimension's own \
+vocabulary. A dimension's listed sub-topics are examples of what counts as evidence, not a \
+checklist the text must name verbatim - draw the reasonable inference a knowledgeable grant \
+reviewer would. For instance: "four unpaid officers, no paid staff" is real evidence for the \
+leadership dimension (it shows thin capacity to manage awarded funds) even though the words \
+"grants owner" or "approval workflow" never appear; stated revenue and expense figures are \
+real evidence for the financial dimension even without the phrase "financial statements"; \
+"no institutional or corporate partnerships" is real evidence for the partnerships dimension \
+even without the word "MOU." Move the score up or down from the 50 midpoint whenever the \
+description supports a reasonable inference in that direction, however it's phrased, and \
+explain the inference in the note. Reserve a 50 for a dimension only when the description \
+truly contains nothing - not even indirect evidence - bearing on it.
 
 Dimensions (name: what it measures):
 - strategy: Strategy and Positioning (case for support, funding priorities, funder fit, grant calendar)
