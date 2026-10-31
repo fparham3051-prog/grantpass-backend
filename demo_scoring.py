@@ -68,6 +68,29 @@ def _find_years_operating(text):
     return None
 
 
+def _find_dollar_figure(text, labels):
+    """Finds a dollar amount following any of the given line-item labels
+    (e.g. "total revenue", "net assets"), in either order ("total revenue
+    $656,185" or "$656,185 in total revenue"). Returns a float or None."""
+    label_pat = "|".join(re.escape(l) for l in labels)
+    m = re.search(rf"(?:{label_pat})[^.$\d]{{0,15}}\$?\s?([\d,]+(?:\.\d+)?)", text, re.I)
+    if m:
+        return float(m.group(1).replace(",", ""))
+    m = re.search(rf"\$\s?([\d,]+(?:\.\d+)?)[^.]{{0,15}}(?:{label_pat})", text, re.I)
+    if m:
+        return float(m.group(1).replace(",", ""))
+    return None
+
+
+def _find_officer_count(text):
+    words_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+    m = re.search(r"(\d+|one|two|three|four|five|six)\s*(?:unpaid\s*)?officers?\b", text, re.I)
+    if not m:
+        return None
+    raw = m.group(1).lower()
+    return words_to_num.get(raw) or (int(raw) if raw.isdigit() else None)
+
+
 def _find_board_meetings_per_year(text):
     words_to_num = {"once": 1, "twice": 2, "quarterly": 4, "monthly": 12, "annually": 1}
     # "meets twice a year" / "meets 3 times a year" / "meets 4x a year"
@@ -151,6 +174,11 @@ def _score_program(text):
     elif re.search(r"(don'?t|do not|doesn'?t|no)[^.]{0,40}(publish|share)[^.]{0,20}(impact|outcome|result)", text, re.I):
         score -= 10
         notes.append("outcomes tracked but not communicated externally to donors")
+
+    if re.search(r"\b(preclinical|pre[- ]clinical|no clinical trials?|pilot stage|pilot phase|proof[- ]of[- ]concept|early[- ]stage research)\b", text, re.I):
+        score -= 15
+        notes.append("program is at an early/preclinical or pilot stage, with evidence still to be generated")
+
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
 
 
@@ -193,8 +221,26 @@ def _score_financial(text):
         score += 10
         notes.append("recurring/monthly giving program mentioned — measurably stickier revenue than one-time gifts")
 
+    revenue = _find_dollar_figure(text, ["total revenue", "revenue of"])
+    expenses = _find_dollar_figure(text, ["total expenses", "expenses of"])
+    net_assets = _find_dollar_figure(text, ["net assets"])
+    if revenue and expenses:
+        ratio = expenses / revenue
+        if ratio > 1:
+            score -= 15
+            notes.append(f"stated expenses exceed stated revenue — operating at a deficit")
+        elif ratio < 0.10:
+            score -= 10
+            notes.append(f"expenses are only {ratio:.0%} of revenue — most of every dollar raised is being banked rather than deployed, a capacity-deployment flag")
+        else:
+            score += 10
+            notes.append(f"stated revenue and expense figures give a real spend rate to evaluate ({ratio:.0%})")
+    elif revenue or expenses or net_assets:
+        score += 5
+        notes.append("specific dollar figures stated, though not enough to compute a spend rate")
+
     if not notes:
-        notes.append("no financial detail (reserves, concentration, audit status) found in the description")
+        notes.append("no financial detail (reserves, concentration, audit status, or dollar figures) found in the description")
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
 
 
@@ -214,6 +260,16 @@ def _score_leadership(text):
     if re.search(r"deputy director|associate director|second[- ]in[- ]command", text, re.I):
         score += 10
         notes.append("leadership depth beyond one person mentioned")
+
+    if re.search(r"(all[- ]volunteer|volunteer[- ]only|volunteer[- ]run|unpaid staff|no paid staff|\$0 (?:in )?compensation|zero compensation|no compensation)", text, re.I):
+        score -= 15
+        notes.append("leadership and staff are unpaid/volunteer, a real capacity constraint for managing institutional funding and reporting obligations")
+
+    officer_count = _find_officer_count(text)
+    if officer_count is not None and officer_count <= 3:
+        score -= 10
+        notes.append(f"only {officer_count} officers named — a small leadership bench to carry grant administration")
+
     if not notes:
         notes.append("no leadership structure details found in the description")
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
@@ -257,10 +313,13 @@ def _score_partnerships(text):
     advisor/DAF-sponsor referral relationships) - see the August 2026
     research briefs."""
     score, notes = 50, []
-    if re.search(r"\b(partner|partnership|mou|memorandum of understanding|coalition|collaborat\w*|referral)\b", text, re.I):
+    if re.search(r"\b(partners?|partnerships?|mous?|memorandum of understanding|coalitions?|collaborat\w*|referrals?)\b", text, re.I):
         score += 15
         notes.append("partnership/collaboration language mentioned")
-    if re.search(r"(no|not|without)[^.]{0,30}(partner|partnership)", text, re.I):
+    if re.search(r"(no|not|without|zero|lacks?)[^.]{0,60}(institutional|funder|corporate|foundation)[^.]{0,20}partnerships?", text, re.I):
+        score -= 10
+        notes.append("no institutional/funder partnerships mentioned — community or affinity ties exist but the funder-facing partnership layer is missing")
+    elif re.search(r"(no|not|without|zero|lacks?)[^.]{0,60}partnerships?\b", text, re.I):
         score -= 15
         notes.append("explicitly no partnership relationships mentioned")
     if re.search(r"moves management|donor pipeline|donor stages?|(identification|qualification|cultivation|solicitation)[^.]{0,40}stewardship", text, re.I):
@@ -311,6 +370,11 @@ def _score_governance(text):
         else:
             score += 5
             notes.append(f"{n}-member board")
+
+    if re.search(r"\bein\b|employer identification number", text, re.I) or \
+       re.search(r"form 990|filed[^.]{0,20}(990|irs)|irs filing", text, re.I):
+        score += 10
+        notes.append("EIN/Form 990 filing status mentioned, a baseline compliance signal")
 
     if not notes:
         notes.append("no governance/compliance details found in the description")
