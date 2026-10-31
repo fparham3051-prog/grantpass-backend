@@ -126,6 +126,15 @@ def _score_strategy(text):
     if re.search(r"(target|priority) funders?|funder fit|grant calendar|case for support", text, re.I):
         score += 10
         notes.append("funder targeting/case-for-support language mentioned")
+
+    if _find_dollar_figure(text, ["seeking", "raising", "campaign goal", "goal of", "toward launching", "toward"]) is not None:
+        score += 10
+        notes.append("a specific funding target/ask amount is stated — a concrete ask rather than an open-ended one")
+
+    if re.search(r"\b(a single|one|sole|only one)\b[^.]{0,30}(program|research program|project)\b", text, re.I):
+        score -= 10
+        notes.append("funds a single program with no stated diversification strategy — a funder-fit and concentration risk")
+
     if not notes:
         notes.append("no strategic plan or funder-targeting details found in the description")
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
@@ -299,6 +308,12 @@ def _score_operations(text):
     if re.search(r"gift acceptance policy|accept(?:s|ing)? (?:appreciated )?stock|donor.advised fund grants?|\bqcd\b|planned giving program", text, re.I):
         score += 10
         notes.append("complex/planned-gift acceptance capability mentioned (stock, DAF, or gift-acceptance policy)")
+
+    channel_hits = len(re.findall(r"\b(paypal|venmo|cashapp|cash app|crypto|text[- ]to[- ]give|stock donation|vehicle donation)\b", text, re.I))
+    if channel_hits >= 3:
+        score += 10
+        notes.append(f"{channel_hits} distinct digital giving channels mentioned, suggesting modern donor-operations infrastructure")
+
     if not notes:
         notes.append("no reporting process or grants-tracking system details found in the description")
     return max(0, min(100, score)), "; ".join(notes).capitalize() + "."
@@ -454,20 +469,65 @@ def claude_dimension_scores(text: str, stage: str = "FUND"):
         with urllib.request.urlopen(req, timeout=20) as resp:
             body = json.loads(resp.read().decode())
         raw_text = body["content"][0]["text"]
-        raw_text = re.sub(r"^```(json)?|```$", "", raw_text.strip(), flags=re.M).strip()
-        parsed = json.loads(raw_text)
-        out = {}
-        for d in scoring.RUBRIC:
-            key = d["key"]
-            entry = parsed.get(key) or {}
-            score = entry.get("score", 50)
-            try:
-                score = max(0, min(100, int(round(float(score)))))
-            except (TypeError, ValueError):
-                score = 50
-            note = entry.get("note") or "No note returned."
-            out[key] = (score, note)
-        return out
+        return _parse_dimension_json(raw_text)
+    except Exception:
+        return None
+
+
+def _parse_dimension_json(raw_text: str):
+    """Shared response parser for any AI path (Claude, Gemini, ...): strips
+    markdown code fences, parses the rubric-shaped JSON, and clamps/defaults
+    each dimension so a malformed or partial model response degrades to the
+    same neutral-50 behavior as no data at all, rather than raising."""
+    raw_text = re.sub(r"^```(json)?|```$", "", raw_text.strip(), flags=re.M).strip()
+    parsed = json.loads(raw_text)
+    out = {}
+    for d in scoring.RUBRIC:
+        key = d["key"]
+        entry = parsed.get(key) or {}
+        score = entry.get("score", 50)
+        try:
+            score = max(0, min(100, int(round(float(score)))))
+        except (TypeError, ValueError):
+            score = 50
+        note = entry.get("note") or "No note returned."
+        out[key] = (score, note)
+    return out
+
+
+# ---------- Gemini path (free-tier fallback) ----------
+#
+# Google's Gemini API offers a genuine free tier on its Flash-Lite models
+# (see ai.google.dev/gemini-api/docs/pricing) - used here as a second AI-
+# comprehension attempt when the Claude path is unavailable (no key set, or
+# the call fails - e.g. no funded Anthropic Console balance), before falling
+# back to the zero-cost heuristic. Needs its own free key from
+# aistudio.google.com, set as GEMINI_API_KEY - entirely separate from
+# ANTHROPIC_API_KEY and from any Anthropic Console billing.
+
+def gemini_dimension_scores(text: str, stage: str = "FUND"):
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    stage_note = STAGE_CORE_QUESTIONS.get(stage, STAGE_CORE_QUESTIONS["FUND"])
+    prompt_text = f"InstitutionalOS lifecycle stage: {stage} — core question: {stage_note}\n\n" + (CLAUDE_PROMPT % text)
+    payload = json.dumps({
+        "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
+        "generationConfig": {"responseMimeType": "application/json"},
+    }).encode()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = json.loads(resp.read().decode())
+        raw_text = body["candidates"][0]["content"]["parts"][0]["text"]
+        return _parse_dimension_json(raw_text)
     except Exception:
         return None
 
@@ -477,11 +537,17 @@ def claude_dimension_scores(text: str, stage: str = "FUND"):
 def score_description(description: str, stage: str = scoring.DEFAULT_STAGE) -> dict:
     text = (description or "").strip()
     stage = stage if stage in scoring.STAGE_WEIGHTS else scoring.DEFAULT_STAGE
+
     dims_raw = claude_dimension_scores(text, stage)
-    method = "ai"
+    ai_provider = "claude" if dims_raw is not None else None
+
+    if dims_raw is None:
+        dims_raw = gemini_dimension_scores(text, stage)
+        ai_provider = "gemini" if dims_raw is not None else None
+
+    method = "ai" if dims_raw is not None else "heuristic"
     if dims_raw is None:
         dims_raw = heuristic_dimension_scores(text)
-        method = "heuristic"
 
     dim_scores = {k: v[0] for k, v in dims_raw.items()}
     overall = scoring.compute_overall(dim_scores, stage)
@@ -506,4 +572,5 @@ def score_description(description: str, stage: str = scoring.DEFAULT_STAGE) -> d
         "hardGate": scoring.hard_gate_check(dim_scores, stage),
         "dimensions": dims,
         "method": method,
+        "aiProvider": ai_provider,
     }
