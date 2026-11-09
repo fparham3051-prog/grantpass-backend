@@ -281,6 +281,9 @@ def init_db():
     conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS org_name TEXT;")
     conn.executescript("ALTER TABLE demo_score_log ADD COLUMN IF NOT EXISTS email TEXT;")
     conn.executescript("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
+    # Candid Seal of Transparency level the client currently holds
+    # (bronze/silver/gold/platinum, '' for none). See candid_seal.py.
+    conn.executescript("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS candid_seal TEXT DEFAULT '';")
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")
     # Form 990 Part VI governance fields, added 2026-08-29 alongside

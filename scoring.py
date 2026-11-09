@@ -222,7 +222,7 @@ def hard_gate_check(dimension_scores: dict, stage: str = DEFAULT_STAGE) -> dict:
         "note": (
             "Numeric floors only — a documented unresolved red risk can still block a "
             "move-forward decision even when every numeric gate is met; that check is "
-            "part of the full guided Review, not this self-service scorecard."
+            "part of the paid InstitutionalOS Diagnostic, not this self-service scorecard."
         ),
     }
 

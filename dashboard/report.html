@@ -70,7 +70,20 @@ html += '<div class="dim-row"><div>' + d.name + '</div>' +
 '<div class="bar-track"><div class="bar-fill" style="width:' + d.score + '%;background:' + levelColor(d.level) + '"></div></div>' +
 '<div style="text-align:right;font-weight:700;">' + Math.round(d.score) + '</div></div>';
 });
+html += renderCandidSeal(data.candidSeal);
 return html;
+}
+
+// Steps to the client's next Candid Seal of Transparency level (part of
+// the 90-day plan). Mirrors renderCandidSeal() in index.html.
+const SEAL_DIM_NAMES = { strategy: 'Strategy and Positioning', program: 'Program and Impact Evidence', financial: 'Revenue and Financial Health', leadership: 'Leadership and Organizational Capacity', operations: 'Operations and Infrastructure', partnerships: 'Partnerships and Ecosystem', governance: 'Governance and Risk' };
+function renderCandidSeal(s) {
+if (!s) return '';
+const steps = (s.steps || []).map(x => '<li><strong>' + x.requirement + '</strong>: ' + x.step + ' <span class="muted">(' + (SEAL_DIM_NAMES[x.dimension] || x.dimension) + ')</span></li>').join('');
+return '<div style="margin:14px 0;padding:12px 14px;border:1px solid #e3e6ea;border-left:4px solid #b8913a;border-radius:6px;">' +
+'<div><strong>Candid Seal path:</strong> current ' + s.currentName + (s.nextName ? ' &middot; next: <strong>' + s.nextName + '</strong>' : '') + '</div>' +
+(steps ? '<ol style="margin:8px 0 4px 18px;padding:0;">' + steps + '</ol>' : '') +
+'<div class="muted" style="font-size:12px;">' + s.note + '</div></div>';
 }
 
 function renderDonor(donor) {

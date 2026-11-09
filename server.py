@@ -22,6 +22,7 @@ import db
 import demo_scoring
 import parsing
 import scoring
+import candid_seal
 import os_sync
 
 db.init_db()
@@ -154,6 +155,9 @@ def score_org(conn, org_id: int) -> dict:
         "dimensionScores": dim_scores,
         "financialSourced": bool(snapshot),
         "governanceSourced": gov_has_990_data,
+        # Steps to the client's next Candid Seal level, part of every
+        # diagnostic's 90-day plan (see candid_seal.py).
+        "candidSeal": candid_seal.seal_path(org["candid_seal"] if "candid_seal" in org.keys() else ""),
     }
 
 class Handler(BaseHTTPRequestHandler):
@@ -213,6 +217,10 @@ class Handler(BaseHTTPRequestHandler):
             m = re.match(r"^/orgs/(\d+)/stage$", path)
             if m and method == "POST":
                 return self._set_org_stage(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/candid-seal$", path)
+            if m and method == "POST":
+                return self._set_org_candid_seal(int(m.group(1)))
 
             m = re.match(r"^/orgs/(\d+)/ingest-990$", path)
             if m and method == "POST":
@@ -367,7 +375,7 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 401, {"error": "auth required"})
         conn = db.get_conn()
         rows = conn.execute(
-            "SELECT id, name, ein, description, stage, created_at FROM organizations WHERE user_id=?", (user_id,)
+            "SELECT id, name, ein, description, stage, candid_seal, created_at FROM organizations WHERE user_id=?", (user_id,)
         ).fetchall()
         conn.close()
         return json_response(self, 200, {"organizations": [dict(r) for r in rows]})
@@ -405,6 +413,28 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         conn.close()
         return json_response(self, 200, {"id": org_id, "stage": stage})
+
+    def _set_org_candid_seal(self, org_id):
+        """Body: {"level": "bronze"|"silver"|"gold"|"platinum"|""}. The
+        Candid Seal the client holds now; the score's candidSeal block then
+        lists the next level's requirements for the 90-day plan."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        raw = (data.get("level") or "").strip().lower()
+        level = candid_seal.normalize(raw)
+        if raw and not level:
+            return json_response(self, 400, {"error": f"level must be one of {candid_seal.LEVELS} or empty"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute("UPDATE organizations SET candid_seal=? WHERE id=?", (level, org_id))
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"id": org_id, "candidSeal": level})
 
     def _ingest_990(self, org_id):
         user_id = get_auth_user(self)

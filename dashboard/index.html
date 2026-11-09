@@ -197,6 +197,14 @@
             <option value="FUND">FUND</option>
             <option value="SUSTAIN">SUSTAIN</option>
           </select>
+          <label style="margin:0 0 0 12px;font-weight:600;" for="orgDetailSeal">Candid Seal</label>
+          <select id="orgDetailSeal">
+            <option value="">None yet</option>
+            <option value="bronze">Bronze</option>
+            <option value="silver">Silver</option>
+            <option value="gold">Gold</option>
+            <option value="platinum">Platinum</option>
+          </select>
           <span class="status-msg" id="orgStageStatus" style="margin:0;"></span>
         </div>
 
@@ -469,6 +477,7 @@ function renderScoreCard(data) {
     html += `<p class="status-msg error" style="margin-top:4px;">Hard gate open: ${openList}</p>`;
   }
   html += renderEscalationCta(data);
+  html += renderCandidSeal(data.candidSeal);
   (data.dimensions || []).forEach(d => {
     html += `<div class="dim-row">
       <div>${d.name}</div>
@@ -477,6 +486,18 @@ function renderScoreCard(data) {
     </div>`;
   });
   return html;
+}
+
+// Candid Seal path: the steps to the client's next Candid Seal of
+// Transparency level, part of every diagnostic's 90-day plan.
+function renderCandidSeal(s) {
+  if (!s) return '';
+  const steps = (s.steps || []).map(x => `<li><strong>${x.requirement}</strong>: ${x.step} <span class="muted">(${DIM_NAMES[x.dimension] || x.dimension})</span></li>`).join('');
+  return `<div class="candid-seal-path" style="margin:14px 0;padding:12px 14px;border:1px solid #e3e6ea;border-left:4px solid #b8913a;border-radius:6px;">
+    <div><strong>Candid Seal path:</strong> current ${s.currentName}${s.nextName ? ` &middot; next: <strong>${s.nextName}</strong>` : ''}</div>
+    ${steps ? `<ol style="margin:8px 0 4px 18px;padding:0;">${steps}</ol>` : ''}
+    <div class="muted" style="font-size:12px;">${s.note}</div>
+  </div>`;
 }
 
 function renderEscalationCta(data) {
@@ -876,6 +897,23 @@ async function loadOrgs() {
   }
 }
 
+document.getElementById('orgDetailSeal').addEventListener('change', async (e) => {
+  if (!selectedOrgId) return;
+  const statusEl = document.getElementById('orgStageStatus');
+  try {
+    await api('POST', `/orgs/${selectedOrgId}/candid-seal`, { level: e.target.value });
+    const org = orgs.find(o => o.id === selectedOrgId);
+    if (org) org.candid_seal = e.target.value;
+    statusEl.className = 'status-msg ok';
+    statusEl.textContent = 'Saved — updating plan…';
+    await loadFullReport(selectedOrgId, org ? org.name : '');
+    statusEl.textContent = 'Saved.';
+  } catch (err) {
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = err.message;
+  }
+});
+
 document.getElementById('backToOrgsBtn').addEventListener('click', () => {
   document.getElementById('orgListPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -947,6 +985,7 @@ async function selectOrg(id) {
   document.getElementById('orgDetailPanel').classList.remove('hidden');
   document.getElementById('orgDetailName').textContent = org ? org.name : 'Organization';
   document.getElementById('orgDetailStage').value = (org && org.stage) || 'FUND';
+  document.getElementById('orgDetailSeal').value = (org && org.candid_seal) || '';
   document.getElementById('orgStageStatus').textContent = '';
   document.getElementById('scoreResult').innerHTML = '';
 
