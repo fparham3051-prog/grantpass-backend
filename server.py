@@ -222,6 +222,10 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "POST":
                 return self._set_org_candid_seal(int(m.group(1)))
 
+            m = re.match(r"^/orgs/(\d+)/portal$", path)
+            if m and method == "POST":
+                return self._set_org_portal(int(m.group(1)))
+
             m = re.match(r"^/orgs/(\d+)/ingest-990$", path)
             if m and method == "POST":
                 return self._ingest_990(int(m.group(1)))
@@ -312,6 +316,14 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "GET":
                 return self._get_public_report(m.group(1))
 
+            m = re.match(r"^/orgs/(\d+)/client-link$", path)
+            if m and method == "POST":
+                return self._create_client_link(int(m.group(1)))
+
+            m = re.match(r"^/public/portal/([A-Za-z0-9_-]+)$", path)
+            if m and method == "GET":
+                return self._get_public_report(m.group(1), client=True)
+
             return json_response(self, 404, {"error": "not found"})
         except Exception as e:
             return json_response(self, 500, {"error": str(e)})
@@ -375,7 +387,7 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 401, {"error": "auth required"})
         conn = db.get_conn()
         rows = conn.execute(
-            "SELECT id, name, ein, description, stage, candid_seal, created_at FROM organizations WHERE user_id=?", (user_id,)
+            "SELECT id, name, ein, description, stage, candid_seal, next_session_at, next_session_note, documents_url, created_at FROM organizations WHERE user_id=?", (user_id,)
         ).fetchall()
         conn.close()
         return json_response(self, 200, {"organizations": [dict(r) for r in rows]})
@@ -435,6 +447,34 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         conn.close()
         return json_response(self, 200, {"id": org_id, "candidSeal": level})
+
+    def _set_org_portal(self, org_id):
+        """Body: {"nextSessionAt": "YYYY-MM-DDTHH:MM" or "", "nextSessionNote":
+        str, "documentsUrl": "https://..." or ""}. What the client portal
+        (report.html) shows under "Next session" and "Your documents"."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        when = (data.get("nextSessionAt") or "").strip()[:16]
+        if when and not re.match(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$", when):
+            return json_response(self, 400, {"error": "nextSessionAt must be YYYY-MM-DD or YYYY-MM-DDTHH:MM"})
+        note = (data.get("nextSessionNote") or "").strip()[:300]
+        docs = (data.get("documentsUrl") or "").strip()[:500]
+        if docs and not docs.lower().startswith("https://"):
+            return json_response(self, 400, {"error": "documentsUrl must start with https://"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute(
+            "UPDATE organizations SET next_session_at=?, next_session_note=?, documents_url=? WHERE id=?",
+            (when, note, docs, org_id),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"id": org_id, "nextSessionAt": when, "nextSessionNote": note, "documentsUrl": docs})
 
     def _ingest_990(self, org_id):
         user_id = get_auth_user(self)
@@ -1310,13 +1350,34 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         return json_response(self, 200, {"shareToken": token})
 
-    def _get_public_report(self, token):
+    def _create_client_link(self, org_id):
+        """The client's own portal link (report.html?client=...). Unlike the
+        funder link it also shows outcomes, progress updates, the next
+        session, and the documents folder."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        token = org["client_token"] if "client_token" in org.keys() else None
+        if not token:
+            token = secrets.token_urlsafe(18)
+            conn.execute("UPDATE organizations SET client_token=? WHERE id=?", (token, org_id))
+            conn.commit()
+        conn.close()
+        return json_response(self, 200, {"clientToken": token})
+
+    def _get_public_report(self, token, client=False):
         """Unauthenticated, read-only counterpart to /orgs/{id}/full-report,
         looked up by share token instead of Bearer auth + ownership. This is
         the link a nonprofit hands to a funder - deliberately a smaller
         payload than the logged-in full report (no internal notes)."""
         conn = db.get_conn()
-        org = conn.execute("SELECT * FROM organizations WHERE share_token=?", (token,)).fetchone()
+        column = "client_token" if client else "share_token"
+        org = conn.execute(f"SELECT * FROM organizations WHERE {column}=?", (token,)).fetchone()
         if not org:
             conn.close()
             return json_response(self, 404, {"error": "not found"})
@@ -1343,6 +1404,24 @@ class Handler(BaseHTTPRequestHandler):
             if day and r["overall"] is not None:
                 by_day[day] = round(float(r["overall"]), 1)
         history = [{"date": d, "overall": v} for d, v in sorted(by_day.items())][-24:]
+        updates, outcomes, portal = [], [], None
+        if client:
+            conn2 = db.get_conn()
+            updates = conn2.execute(
+                "SELECT update_text, overall_before, overall_after, created_at FROM report_entries WHERE org_id=? "
+                "ORDER BY created_at DESC LIMIT 20", (org_id,)
+            ).fetchall()
+            outcomes = conn2.execute(
+                "SELECT funder_name, result, amount, logged_at FROM outcomes WHERE org_id=? ORDER BY logged_at DESC LIMIT 20",
+                (org_id,),
+            ).fetchall()
+            conn2.close()
+            keys = org.keys()
+            portal = {
+                "nextSessionAt": (org["next_session_at"] if "next_session_at" in keys else "") or "",
+                "nextSessionNote": (org["next_session_note"] if "next_session_note" in keys else "") or "",
+                "documentsUrl": (org["documents_url"] if "documents_url" in keys else "") or "",
+            }
 
         donor = {"hasData": False, "responseCount": 0, "averageScore": None}
         if rows:
@@ -1357,6 +1436,7 @@ class Handler(BaseHTTPRequestHandler):
             "donorSustainability": donor,
             "compliance": [dict(r) for r in compliance_rows],
             "history": history,
+            **({"updates": [dict(r) for r in updates], "outcomes": [dict(r) for r in outcomes], "portal": portal} if client else {}),
         })
 
 def main():

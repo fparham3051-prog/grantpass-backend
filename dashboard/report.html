@@ -88,6 +88,7 @@ main { padding: 28px 0 10px; }
 .pill.red { background: var(--red-bg); color: var(--red); }
 .pill.amber { background: var(--gold-soft); color: var(--gold-access); }
 .pill.green { background: var(--green-bg); color: var(--green); }
+.pill.grey { background: #EDEFF2; color: var(--muted); }
 
 .next-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .next-grid > div { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
@@ -97,6 +98,8 @@ main { padding: 28px 0 10px; }
 
 footer { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0 40px; }
 .state { padding: 60px 0; text-align: center; }
+.session { border-top: 4px solid var(--gold); }
+.session p { margin: 0 0 12px; font-size: 14px; }
 .error { color: var(--red); }
 
 @media (max-width: 640px) {
@@ -157,7 +160,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const r0 = (n) => Math.round(Number(n) || 0);
 const fmtDate = (d) => new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-async function fetchReport(token) {
+async function fetchReport(token, client) {
   const params = new URLSearchParams(location.search);
   const bases = [params.get('api'), PRIMARY_API, FALLBACK_API]
     .filter((b) => b && /^(https:\/\/[\w.-]+|http:\/\/(localhost|127\.0\.0\.1))(:\d+)?$/.test(b.replace(/\/+$/, '')))
@@ -165,7 +168,7 @@ async function fetchReport(token) {
   let lastError = 'We couldn’t load this report.';
   for (const base of [...new Set(bases)]) {
     try {
-      const res = await fetch(base + '/public/report/' + encodeURIComponent(token));
+      const res = await fetch(base + (client ? '/public/portal/' : '/public/report/') + encodeURIComponent(token));
       const data = await res.json().catch(() => ({}));
       if (res.ok) return data;
       lastError = res.status === 404 ? 'This report link isn’t valid anymore. Ask Franklin for a fresh one.' : (data.error || lastError);
@@ -178,7 +181,7 @@ function heroHtml(d) {
   const r = d.readiness || {};
   const band = r.decisionBand || {};
   return `<section class="hero"><div class="wrap">
-    <p class="eyebrow">InstitutionalOS Report</p>
+    <p class="eyebrow">${d.portal ? 'Your client portal' : 'InstitutionalOS Report'}</p>
     <h1>${esc(d.org.name)}</h1>
     <p class="hero-meta">${STAGE_NAMES[r.stage] ? esc(STAGE_NAMES[r.stage]) + ' stage &middot; ' : ''}Updated ${esc(new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }))}</p>
     <div class="hero-score">
@@ -294,6 +297,52 @@ function donorHtml(d) {
     <p style="margin:0"><strong style="font-family:var(--font-heading);font-size:28px;color:var(--navy)">${r0(d.averageScore)}</strong> <span class="muted">average across ${d.responseCount} stewardship assessment${d.responseCount === 1 ? '' : 's'}</span></p></section>`;
 }
 
+function sessionHtml(p) {
+  if (!p) return '';
+  const when = p.nextSessionAt ? new Date(p.nextSessionAt.length > 10 ? p.nextSessionAt : p.nextSessionAt + 'T00:00') : null;
+  const hasTime = p.nextSessionAt && p.nextSessionAt.length > 10;
+  const whenText = when && !isNaN(when) ? when.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) + (hasTime ? ' at ' + when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '') : '';
+  const upcoming = when && !isNaN(when) && when.getTime() > Date.now() - 86400000;
+  let cal = '';
+  if (upcoming && hasTime) {
+    const fmt = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const end = new Date(when.getTime() + 60 * 60000);
+    cal = `<a class="btn btn-ghost" target="_blank" rel="noopener" href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('Session with Franklin Parham')}&dates=${fmt(when)}/${fmt(end)}&details=${encodeURIComponent(p.nextSessionNote || '')}">Add to Google Calendar</a>`;
+  }
+  return `<section class="card session">
+    <div class="next-grid">
+      <div><h3>Next session</h3>${upcoming ? `<p><strong style="color:var(--navy)">${esc(whenText)}</strong>${p.nextSessionNote ? '<br>' + esc(p.nextSessionNote) : ''}</p><div class="actions">${cal}<a class="btn btn-ghost" href="${CALENDLY}" target="_blank" rel="noopener">Need another time?</a></div>`
+        : `<p>Nothing scheduled yet.</p><a class="btn btn-gold" href="${CALENDLY}" target="_blank" rel="noopener">Book a session</a>`}</div>
+      <div><h3>Your documents</h3>${p.documentsUrl ? `<p>Plans, memos, and working files we share, in one folder.</p><a class="btn btn-ghost" href="${esc(p.documentsUrl)}" target="_blank" rel="noopener">Open your folder</a>` : '<p>Franklin will add your shared folder here.</p>'}</div>
+    </div>
+  </section>`;
+}
+
+function updatesHtml(list) {
+  if (!list || !list.length) return '';
+  const rows = list.map((u) => {
+    const moved = u.overall_before != null && u.overall_after != null ? Math.round(u.overall_after - u.overall_before) : null;
+    return `<div class="item"><div><strong>${esc(fmtDate(u.created_at))}</strong><div>${esc(u.update_text)}</div></div>${moved != null ? `<span class="pill ${moved >= 0 ? 'green' : 'red'}">${moved >= 0 ? '+' : ''}${moved} pts</span>` : ''}</div>`;
+  }).join('');
+  return `<section class="card"><h2>Progress updates</h2><p class="lead">What's changed since each check-in.</p>${rows}</section>`;
+}
+
+function outcomesHtml(list) {
+  if (!list || !list.length) return '';
+  const money = (n) => n == null ? '' : '$' + Math.round(n).toLocaleString();
+  const rows = list.map((o) => {
+    const res = String(o.result || '').toLowerCase();
+    const label = { funded: 'Funded', declined: 'Not funded', pending: 'Pending' }[res] || o.result;
+    const cls = res === 'funded' ? 'green' : res === 'pending' ? 'amber' : 'grey';
+    return `<div class="item"><div><strong>${esc(o.funder_name)}</strong><div class="muted">${esc(fmtDate(o.logged_at))}${o.amount ? ' &middot; ' + money(o.amount) : ''}</div></div><span class="pill ${cls}">${esc(label)}</span></div>`;
+  }).join('');
+  return `<section class="card"><h2>Funding results</h2><p class="lead">Applications and decisions we've tracked together.</p>${rows}</section>`;
+}
+
+function funderNoteHtml() {
+  return `<section class="card"><h2>About this report</h2><p style="margin:0">InstitutionalOS scores an organization on seven dimensions using evidence, not self-description: filed Form 990 data where available, and documents reviewed by Frankly Inspired and Associates. <a href="${SITE}/methodology" target="_blank" rel="noopener">How scoring works</a>.</p></section>`;
+}
+
 function nextHtml() {
   return `<section class="card no-print">
     <h2>What happens next</h2>
@@ -307,17 +356,19 @@ function nextHtml() {
 
 async function load() {
   const app = document.getElementById('app');
-  const token = new URLSearchParams(location.search).get('token');
+  const params = new URLSearchParams(location.search);
+  const client = params.get('client');
+  const token = client || params.get('token');
   if (!token) {
     app.innerHTML = '<div class="wrap state"><h1>Report link needed</h1><p class="muted">Open the private link Franklin sent you. If you can’t find it, email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a>.</p></div>';
     return;
   }
   try {
-    const d = await fetchReport(token);
-    document.title = d.org.name + ' | InstitutionalOS Report';
-    app.innerHTML = heroHtml(d) + '<main><div class="wrap">' +
-      constraintHtml(d.readiness || {}) + dimsHtml(d.readiness || {}) + historyHtml(d.history) +
-      sealHtml((d.readiness || {}).candidSeal) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + nextHtml() +
+    const d = await fetchReport(token, !!client);
+    document.title = d.org.name + (client ? ' | Client Portal' : ' | InstitutionalOS Report');
+    app.innerHTML = heroHtml(d) + '<main><div class="wrap">' + (client ? sessionHtml(d.portal) : '') +
+      constraintHtml(d.readiness || {}) + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) : '') +
+      sealHtml((d.readiness || {}).candidSeal) + (client ? outcomesHtml(d.outcomes) : '') + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + (client ? nextHtml() : funderNoteHtml()) +
       '</div></main>';
   } catch (e) {
     app.innerHTML = '<div class="wrap state"><h1>We couldn’t open this report</h1><p class="error">' + esc(e.message) + '</p><p class="muted">Email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a> and he’ll send a fresh link.</p></div>';

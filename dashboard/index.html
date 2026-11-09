@@ -29,7 +29,15 @@
   .logo { font-weight:800; font-size:19px; color:#fff; }
   .logo span { color:var(--gold-light); }
   .api-row { display:flex; align-items:center; gap:8px; font-size:12.5px; color:#C7D0DC; }
-  .api-row input { border:1px solid rgba(255,255,255,.25); border-radius:8px; padding:6px 9px; font-size:12.5px; width:280px; font-family:inherit; background:rgba(255,255,255,.08); color:#fff; }
+  .conn { position:relative; }
+  .conn summary { list-style:none; cursor:pointer; color:#C7D0DC; font-size:12.5px; padding:6px 10px; border:1px solid rgba(255,255,255,.25); border-radius:8px; }
+  .conn summary::-webkit-details-marker { display:none; }
+  .conn[open] summary { background:rgba(255,255,255,.08); }
+  .conn-panel { position:absolute; right:0; top:calc(100% + 8px); z-index:20; width:320px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:12px; box-shadow:0 8px 24px rgba(11,26,45,.18); }
+  .conn-panel label { display:block; font-size:12px; font-weight:700; color:var(--navy); margin-bottom:6px; }
+  .conn-panel input { margin-bottom:6px; font-size:12.5px; }
+  .conn-panel p { margin:0; font-size:11.5px; color:var(--ink-soft); }
+  @media (max-width:640px) { header { flex-wrap:wrap; gap:10px; } .conn-panel { width:min(320px, 86vw); } }
   .btn { display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:13.5px; border-radius:9px; padding:9px 16px; cursor:pointer; border:1px solid var(--line); background:white; color:var(--navy); }
   .btn-primary { background:var(--gold); color:var(--navy); border-color:var(--gold); }
   .btn-primary:hover { background:var(--gold-access); color:#fff; border-color:var(--gold-access); }
@@ -126,9 +134,15 @@
   <header>
     <div><div class="logo">InstitutionalOS <span>Console</span></div><a href="https://franklyinspired.associates" style="color:#CBA869;font-size:12.5px;text-decoration:none">&larr; Frankly Inspired and Associates</a></div>
     <div class="api-row">
-      <span>API:</span>
-      <input id="apiUrl" value="https://grantpass-backend-600997839134.us-central1.run.app">
       <button class="btn btn-ghost btn-sm hidden" id="logoutBtn">Log out</button>
+      <details class="conn">
+        <summary title="Connection settings">Connection</summary>
+        <div class="conn-panel">
+          <label for="apiUrl">Scoring service address</label>
+          <input id="apiUrl" value="https://grantpass-backend-600997839134.us-central1.run.app">
+          <p>Only change this if Franklin asks you to.</p>
+        </div>
+      </details>
     </div>
   </header>
 
@@ -225,6 +239,23 @@
         <div id="evidenceVaultResult"><p class="muted">Loading...</p></div>
 
         
+<h3>Client Portal</h3>
+<p class="hint">The client's own private page: scores and 90-day targets, progress updates, funding outcomes, Candid Seal steps, compliance calendar, the next session, and their documents folder. Different from the funder link below, which leaves out outcomes and session details.</p>
+<div id="portalBlock">
+  <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
+    <div><label for="portalSessionAt">Next session</label><input type="datetime-local" id="portalSessionAt"></div>
+    <div><label for="portalSessionNote">What it's for</label><input type="text" id="portalSessionNote" maxlength="300" placeholder="Readout of the Diagnostic"></div>
+  </div>
+  <label for="portalDocsUrl">Documents folder link (Google Drive, Dropbox, etc.)</label>
+  <input type="url" id="portalDocsUrl" placeholder="https://drive.google.com/...">
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <button class="btn btn-primary btn-sm" id="savePortalBtn">Save portal details</button>
+    <button class="btn btn-ghost btn-sm" id="getClientLinkBtn">Get client portal link</button>
+  </div>
+  <div class="status-msg" id="portalStatus"></div>
+  <div id="clientLinkResult" style="margin-top:8px;"></div>
+</div>
+
 <h3>Share With a Funder</h3>
 <p class="hint">Generate a read-only link a funder can open without an InstitutionalOS login. It shows your readiness score, donor sustainability summary, and compliance calendar &mdash; no internal notes.</p>
 <div id="shareReportBlock">
@@ -430,6 +461,13 @@ const SAMPLE_SCORE = {
 
 const DONOR_SURVEY_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSf4CUk9LeZiP3M_PUl8AxCYffxVZ0k9sZh4oauvZci99M18AQ/viewform';
 
+// The scoring-service address lives under "Connection" and is remembered
+// in this browser, so it never has to be retyped.
+(function rememberApi() {
+  const el = document.getElementById('apiUrl');
+  try { const saved = localStorage.getItem('gp_api'); if (saved) el.value = saved; } catch (e) {}
+  el.addEventListener('change', () => { try { localStorage.setItem('gp_api', el.value.trim()); } catch (e) {} });
+})();
 function apiUrl() { return document.getElementById('apiUrl').value.replace(/\/$/, ''); }
 function getToken() { return localStorage.getItem('gp_token') || ''; }
 function setToken(t) { if (t) localStorage.setItem('gp_token', t); else localStorage.removeItem('gp_token'); }
@@ -990,6 +1028,11 @@ async function selectOrg(id) {
   document.getElementById('orgDetailName').textContent = org ? org.name : 'Organization';
   document.getElementById('orgDetailStage').value = (org && org.stage) || 'FUND';
   document.getElementById('orgDetailSeal').value = (org && org.candid_seal) || '';
+  document.getElementById('portalSessionAt').value = (org && org.next_session_at) || '';
+  document.getElementById('portalSessionNote').value = (org && org.next_session_note) || '';
+  document.getElementById('portalDocsUrl').value = (org && org.documents_url) || '';
+  document.getElementById('portalStatus').textContent = '';
+  document.getElementById('clientLinkResult').innerHTML = '';
   document.getElementById('orgStageStatus').textContent = '';
   document.getElementById('scoreResult').innerHTML = '';
 
@@ -1261,6 +1304,40 @@ loadCompliance(selectedOrgId);
 statusEl.className = 'status-msg error';
 statusEl.textContent = e.message;
 }
+});
+
+// ---------- CLIENT PORTAL ----------
+function linkBox(url) {
+  return '<div class="row" style="grid-template-columns:1fr auto; gap:8px; align-items:start;">' +
+    '<input readonly value="' + url + '" onclick="this.select()">' +
+    '<button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(\'' + url + '\').then(()=>{this.textContent=\'Copied\';setTimeout(()=>this.textContent=\'Copy link\',1200)})">Copy link</button></div>';
+}
+document.getElementById('savePortalBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('portalStatus');
+  st.className = 'status-msg'; st.textContent = 'Saving...';
+  try {
+    const body = {
+      nextSessionAt: document.getElementById('portalSessionAt').value,
+      nextSessionNote: document.getElementById('portalSessionNote').value,
+      documentsUrl: document.getElementById('portalDocsUrl').value.trim(),
+    };
+    await api('POST', `/orgs/${selectedOrgId}/portal`, body);
+    const org = orgs.find(o => o.id === selectedOrgId);
+    if (org) { org.next_session_at = body.nextSessionAt; org.next_session_note = body.nextSessionNote; org.documents_url = body.documentsUrl; }
+    st.className = 'status-msg ok'; st.textContent = 'Saved. The client portal shows this now.';
+  } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
+});
+document.getElementById('getClientLinkBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('portalStatus');
+  st.className = 'status-msg'; st.textContent = 'Generating...';
+  try {
+    const data = await api('POST', `/orgs/${selectedOrgId}/client-link`);
+    const url = location.origin + '/report.html?client=' + data.clientToken + '&api=' + encodeURIComponent(apiUrl());
+    st.className = 'status-msg ok'; st.textContent = 'Send this to the client only. It works without a login.';
+    document.getElementById('clientLinkResult').innerHTML = linkBox(url);
+  } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
 });
 
 // ---------- SHARE REPORT LINK ----------

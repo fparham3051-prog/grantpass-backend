@@ -284,6 +284,16 @@ def init_db():
     # Candid Seal of Transparency level the client currently holds
     # (bronze/silver/gold/platinum, '' for none). See candid_seal.py.
     conn.executescript("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS candid_seal TEXT DEFAULT '';")
+    # Client portal fields (report.html): the next scheduled session and a
+    # link to the client's shared documents folder. Set from the console.
+    conn.executescript(
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS next_session_at TEXT DEFAULT '';"
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS next_session_note TEXT DEFAULT '';"
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS documents_url TEXT DEFAULT '';"
+        # Separate from share_token (the funder link): the client's own
+        # portal link also shows outcomes, updates, and session details.
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS client_token TEXT;"
+    )
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")
     # Form 990 Part VI governance fields, added 2026-08-29 alongside
