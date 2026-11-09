@@ -3,139 +3,325 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>InstitutionalOS Report | Frankly Inspired</title>
+<meta name="robots" content="noindex, nofollow">
+<title>Your InstitutionalOS Report | Frankly Inspired</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-color-scheme: light;
---navy: #11233D; --navy-deep: #0B1A2D;
---gold: #B28E42; --gold-light: #CBA869; --gold-access: #8E7134;
---charcoal: #23282D; --muted-1: #55606B; --muted-2: #4A545E;
---border-gray: #E2E6EA;
---bg: #FFFFFF; --bg-soft: #F3F5F7; --ink: var(--charcoal); --ink-soft: var(--muted-1);
---line: var(--border-gray); --accent: var(--gold); --accent-dark: var(--gold-access); --accent-soft: #F3ECDC;
---red: #C22F2F; --red-bg: #FBEAEA; --amber: var(--gold-access); --amber-bg: #F3ECDC;
---green: #1E7A4C; --green-bg: #E4F3EC;
+  color-scheme: light;
+  --navy: #11233D; --navy-deep: #0B1A2D;
+  --gold: #B28E42; --gold-light: #CBA869; --gold-access: #8E7134; --gold-soft: #F3ECDC;
+  --charcoal: #23282D; --muted: #55606B; --line: #E2E6EA; --bg-soft: #F3F5F7;
+  --red: #B42828; --red-bg: #FBEAEA; --green: #1E7A4C; --green-bg: #E4F3EC;
+  --font-heading: "Playfair Display", Georgia, serif;
+  --font-body: Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
 }
 * { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif; }
-.wrap { max-width: 800px; margin: 0 auto; padding: 0 24px 40px; }
-header { display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg,var(--navy),var(--navy-deep)); padding:18px 24px; margin:0 -24px 24px; border-radius:0 0 14px 14px; }
-.logo { font-weight:800; font-size:19px; color:#fff; }
-.logo span { color:var(--gold-light); }
-.panel { background:var(--bg-soft); border:1px solid var(--line); border-radius:16px; padding:22px; margin-bottom:18px; }
-.panel h2 { margin:0 0 14px; font-size:16px; color:var(--navy); }
-.panel h3 { margin: 18px 0 10px; font-size:13.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
-.muted { color:var(--ink-soft); font-size:12.5px; }
-.hint { font-size:12px; color:var(--ink-soft); margin:-6px 0 12px; line-height:1.5; }
-.status-msg { font-size:12.5px; color:var(--ink-soft); }
-.status-msg.error { color:var(--red); }
-.pill { display:inline-block; font-size:11px; font-weight:800; padding:3px 10px; border-radius:999px; margin-left:8px; }
-.pill.green { background:var(--green-bg); color:var(--green); }
-.pill.amber { background:var(--amber-bg); color:var(--amber); }
-.pill.red { background:var(--red-bg); color:var(--red); }
-.dim-row { display:grid; grid-template-columns:170px 1fr 40px; align-items:center; gap:10px; font-size:13px; margin-bottom:6px; }
-.bar-track { background:#EDEFEC; border-radius:999px; height:8px; overflow:hidden; }
-.bar-fill { height:100%; border-radius:999px; }
-.score-hero { display:flex; align-items:center; gap:20px; padding:18px 20px; border-radius:14px; margin-bottom:16px; }
-.score-num { font-size:40px; font-weight:800; }
-.list-item { border-bottom:1px solid var(--line); padding:10px 0; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.list-item:last-child { border-bottom:none; }
-.meta { margin-top:2px; }
-.badge { display:inline-block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; background:var(--navy); color:#fff; padding:3px 10px; border-radius:999px; margin-bottom:10px; }
+body { margin: 0; background: var(--bg-soft); color: var(--charcoal); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+h1, h2, h3 { font-family: var(--font-heading); color: var(--navy); font-weight: 600; line-height: 1.2; margin: 0 0 .5em; }
+a { color: var(--gold-access); }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+
+.site-header { background: #fff; border-bottom: 1px solid var(--line); }
+.site-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; padding-bottom: 14px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-heading); font-weight: 600; font-size: 19px; color: var(--navy); text-decoration: none; }
+.brand .mark { width: 26px; height: 26px; border-radius: 6px; background: var(--navy); color: var(--gold-light); display: flex; align-items: center; justify-content: center; font-size: 13px; font-family: var(--font-heading); }
+.header-links { display: flex; align-items: center; gap: 18px; font-size: 14px; }
+.header-links a { color: var(--charcoal); text-decoration: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; padding: 10px 18px; font-weight: 600; font-size: 14px; text-decoration: none; border: 1px solid transparent; cursor: pointer; font-family: var(--font-body); }
+.btn-gold { background: var(--gold); color: var(--navy-deep) !important; }
+.btn-ghost { background: #fff; border-color: var(--line); color: var(--navy) !important; }
+
+.hero { background: linear-gradient(135deg, var(--navy), var(--navy-deep)); color: #fff; padding: 40px 0 44px; }
+.eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 600; color: var(--gold-light); margin: 0 0 10px; }
+.hero h1 { color: #fff; font-size: clamp(28px, 4.5vw, 40px); margin-bottom: 8px; }
+.hero-meta { color: #C9D2DD; font-size: 14px; margin: 0; }
+.hero-score { display: flex; align-items: center; gap: 22px; margin-top: 26px; flex-wrap: wrap; }
+.ring { --p: 0; width: 112px; height: 112px; border-radius: 50%; background: conic-gradient(var(--gold-light) calc(var(--p) * 1%), rgba(255,255,255,.14) 0); display: grid; place-items: center; flex: none; }
+.ring span { width: 90px; height: 90px; border-radius: 50%; background: var(--navy-deep); display: grid; place-items: center; font-family: var(--font-heading); font-size: 34px; font-weight: 700; color: #fff; }
+.hero-score strong { font-size: 18px; display: block; }
+.hero-score p { margin: 2px 0 0; color: #C9D2DD; font-size: 14px; max-width: 460px; }
+
+main { padding: 28px 0 10px; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 24px; margin-bottom: 18px; box-shadow: 0 1px 2px rgba(17,35,61,.04); }
+.card h2 { font-size: 22px; }
+.card .lead { color: var(--muted); margin: -4px 0 16px; font-size: 14px; }
+.constraint { border-left: 4px solid var(--gold); }
+.constraint .big { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 12px; }
+.constraint .big strong { font-family: var(--font-heading); font-size: 24px; color: var(--navy); }
+.target { display: inline-flex; align-items: center; gap: 8px; background: var(--gold-soft); color: var(--gold-access); font-weight: 600; font-size: 13px; padding: 4px 12px; border-radius: 999px; }
+
+.dim { display: grid; grid-template-columns: minmax(150px, 230px) 1fr 92px; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.dim:last-child { border-bottom: 0; }
+.dim .name { font-weight: 500; }
+.dim .name small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.track { position: relative; height: 10px; background: #EDEFF2; border-radius: 999px; }
+.fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--navy); }
+.fill.low { background: var(--red); }
+.fill.mid { background: var(--gold); }
+.fill.none { background: repeating-linear-gradient(45deg, #C9CFD6 0 6px, #DDE1E6 6px 12px); }
+.tick { position: absolute; top: -4px; width: 2px; height: 18px; background: var(--gold-access); }
+.dim .nums { text-align: right; font-variant-numeric: tabular-nums; }
+.dim .nums b { font-size: 15px; }
+.dim .nums small { display: block; color: var(--muted); font-size: 12px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 12px; }
+.legend i { display: inline-block; width: 2px; height: 12px; background: var(--gold-access); vertical-align: middle; margin-right: 6px; }
+
+.gates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.gate { font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); }
+.gate.open { background: var(--red-bg); border-color: #F1CACA; color: var(--red); }
+.gate.met { background: var(--green-bg); border-color: #CBE6D7; color: var(--green); }
+
+.chart svg { width: 100%; height: auto; display: block; }
+.ladder { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 14px; }
+.rung { padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
+.rung.done { background: var(--navy); color: #fff; border-color: var(--navy); }
+.rung.next { background: var(--gold-soft); color: var(--gold-access); border-color: var(--gold-light); }
+.steps { margin: 0; padding-left: 20px; }
+.steps li { margin-bottom: 8px; }
+.muted { color: var(--muted); font-size: 13px; }
+.item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.item:last-child { border-bottom: 0; }
+.pill { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; align-self: center; }
+.pill.red { background: var(--red-bg); color: var(--red); }
+.pill.amber { background: var(--gold-soft); color: var(--gold-access); }
+.pill.green { background: var(--green-bg); color: var(--green); }
+
+.next-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.next-grid > div { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.next-grid h3 { font-size: 17px; margin-bottom: 6px; }
+.next-grid p { margin: 0 0 12px; font-size: 14px; color: var(--muted); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+footer { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0 40px; }
+.state { padding: 60px 0; text-align: center; }
+.error { color: var(--red); }
+
+@media (max-width: 640px) {
+  .dim { grid-template-columns: 1fr 70px; }
+  .dim .track { grid-column: 1 / -1; grid-row: 2; }
+  .header-links .hide-sm { display: none; }
+}
+@media print {
+  .site-header .header-links, .no-print { display: none !important; }
+  body { background: #fff; }
+  .hero { background: none; color: var(--navy); padding: 10px 0; }
+  .hero h1, .hero-score strong { color: var(--navy); }
+  .hero-meta, .hero-score p { color: var(--muted); }
+  .ring span { background: #fff; color: var(--navy); }
+  .card { break-inside: avoid; box-shadow: none; }
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-<header><div class="logo">InstitutionalOS <span>Report</span></div></header>
-<div class="badge">Funder-Ready Report</div>
-<div id="content"><p class="muted">Loading...</p></div>
-</div>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="https://franklyinspired.associates"><span class="mark">F</span> Frankly Inspired</a>
+    <nav class="header-links">
+      <a class="hide-sm" href="https://franklyinspired.associates/health-index">Your Health Index</a>
+      <a class="hide-sm" href="https://franklyinspired.associates/consulting">Consulting</a>
+      <a class="btn btn-gold" href="https://calendly.com/fparham/30min" target="_blank" rel="noopener">Talk with Franklin</a>
+    </nav>
+  </div>
+</header>
+
+<div id="app"><div class="wrap state"><p class="muted">Loading your report&hellip;</p></div></div>
+
+<footer>
+  <div class="wrap">
+    InstitutionalOS is the diagnostic system of <a href="https://franklyinspired.associates">Frankly Inspired and Associates, LLC</a>.
+    <a href="https://franklyinspired.associates/methodology">How scoring works</a> &middot; <a href="https://franklyinspired.associates/privacy">Privacy</a>
+  </div>
+</footer>
+
 <script>
-const API_BASE = 'https://grantpass-backend-600997839134.us-central1.run.app';
+// The client page for one organization, opened from a private share link
+// (report.html?token=...). Read-only: no login, no internal notes.
+const PRIMARY_API = 'https://grantpass-backend.onrender.com';
+const FALLBACK_API = 'https://grantpass-backend-600997839134.us-central1.run.app';
+const CALENDLY = 'https://calendly.com/fparham/30min';
+const SITE = 'https://franklyinspired.associates';
+const STAGE_NAMES = { BUILD: 'Build', FUND: 'Fund', SUSTAIN: 'Sustain' };
+const DIM_KEYS = {
+  'Strategy and Positioning': 'strategy', 'Program and Impact Evidence': 'program',
+  'Revenue and Financial Health': 'financial', 'Leadership and Organizational Capacity': 'leadership',
+  'Operations and Infrastructure': 'operations', 'Partnerships and Ecosystem': 'partnerships',
+  'Governance and Risk': 'governance',
+};
+const KEY_NAMES = Object.fromEntries(Object.entries(DIM_KEYS).map(([n, k]) => [k, n]));
+const SEAL_LEVELS = ['Bronze', 'Silver', 'Gold', 'Platinum'];
 
-function levelColor(level) {
-return level === 'green' ? getComputedStyle(document.documentElement).getPropertyValue('--green')
-: level === 'yellow' ? getComputedStyle(document.documentElement).getPropertyValue('--amber')
-: getComputedStyle(document.documentElement).getPropertyValue('--red');
-}
-function levelFromScore(s) { return s >= 75 ? 'green' : s >= 55 ? 'yellow' : 'red'; }
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const r0 = (n) => Math.round(Number(n) || 0);
+const fmtDate = (d) => new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-function renderScoreCard(data) {
-const level = levelFromScore(data.overall);
-let html = '<div class="score-hero" style="background:' + (level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)') + '">' +
-'<div class="score-num" style="color:' + levelColor(level) + '">' + Math.round(data.overall) + '</div>' +
-'<div><strong>' + data.status + '</strong><br><span class="muted">Weighted overall readiness score</span></div></div>';
-(data.dimensions || []).forEach(d => {
-html += '<div class="dim-row"><div>' + d.name + '</div>' +
-'<div class="bar-track"><div class="bar-fill" style="width:' + d.score + '%;background:' + levelColor(d.level) + '"></div></div>' +
-'<div style="text-align:right;font-weight:700;">' + Math.round(d.score) + '</div></div>';
-});
-html += renderCandidSeal(data.candidSeal);
-return html;
-}
-
-// Steps to the client's next Candid Seal of Transparency level (part of
-// the 90-day plan). Mirrors renderCandidSeal() in index.html.
-const SEAL_DIM_NAMES = { strategy: 'Strategy and Positioning', program: 'Program and Impact Evidence', financial: 'Revenue and Financial Health', leadership: 'Leadership and Organizational Capacity', operations: 'Operations and Infrastructure', partnerships: 'Partnerships and Ecosystem', governance: 'Governance and Risk' };
-function renderCandidSeal(s) {
-if (!s) return '';
-const steps = (s.steps || []).map(x => '<li><strong>' + x.requirement + '</strong>: ' + x.step + ' <span class="muted">(' + (SEAL_DIM_NAMES[x.dimension] || x.dimension) + ')</span></li>').join('');
-return '<div style="margin:14px 0;padding:12px 14px;border:1px solid #e3e6ea;border-left:4px solid #b8913a;border-radius:6px;">' +
-'<div><strong>Candid Seal path:</strong> current ' + s.currentName + (s.nextName ? ' &middot; next: <strong>' + s.nextName + '</strong>' : '') + '</div>' +
-(steps ? '<ol style="margin:8px 0 4px 18px;padding:0;">' + steps + '</ol>' : '') +
-'<div class="muted" style="font-size:12px;">' + s.note + '</div></div>';
-}
-
-function renderDonor(donor) {
-if (!donor || !donor.hasData) {
-return '<p class="muted">No Donor Sustainability &amp; Stewardship Assessment on file yet.</p>';
-}
-const level = levelFromScore(donor.averageScore);
-return '<div class="score-hero" style="background:' + (level === 'green' ? 'var(--green-bg)' : level === 'yellow' ? 'var(--amber-bg)' : 'var(--red-bg)') + '">' +
-'<div class="score-num" style="color:' + levelColor(level) + '">' + Math.round(donor.averageScore) + '</div>' +
-'<div><strong>Donor Sustainability</strong><br><span class="muted">' + donor.responseCount + ' response' + (donor.responseCount === 1 ? '' : 's') + '</span></div></div>';
+async function fetchReport(token) {
+  const params = new URLSearchParams(location.search);
+  const bases = [params.get('api'), PRIMARY_API, FALLBACK_API]
+    .filter((b) => b && /^(https:\/\/[\w.-]+|http:\/\/(localhost|127\.0\.0\.1))(:\d+)?$/.test(b.replace(/\/+$/, '')))
+    .map((b) => b.replace(/\/+$/, ''));
+  let lastError = 'We couldn’t load this report.';
+  for (const base of [...new Set(bases)]) {
+    try {
+      const res = await fetch(base + '/public/report/' + encodeURIComponent(token));
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return data;
+      lastError = res.status === 404 ? 'This report link isn’t valid anymore. Ask Franklin for a fresh one.' : (data.error || lastError);
+    } catch (e) { /* try the next address */ }
+  }
+  throw new Error(lastError);
 }
 
-function complianceStatusInfo(item) {
-if (item.status === 'done') return { label: 'Done', cls: 'green' };
-if (!item.due_date) return { label: 'No date', cls: 'amber' };
-const due = new Date(item.due_date + 'T00:00:00');
-const today = new Date(); today.setHours(0,0,0,0);
-const diffDays = Math.round((due - today) / 86400000);
-if (diffDays < 0) return { label: 'Overdue', cls: 'red' };
-if (diffDays <= 30) return { label: 'Due soon', cls: 'amber' };
-return { label: 'Upcoming', cls: 'green' };
+function heroHtml(d) {
+  const r = d.readiness || {};
+  const band = r.decisionBand || {};
+  return `<section class="hero"><div class="wrap">
+    <p class="eyebrow">InstitutionalOS Report</p>
+    <h1>${esc(d.org.name)}</h1>
+    <p class="hero-meta">${STAGE_NAMES[r.stage] ? esc(STAGE_NAMES[r.stage]) + ' stage &middot; ' : ''}Updated ${esc(new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }))}</p>
+    <div class="hero-score">
+      <div class="ring" style="--p:${r0(r.overall)}"><span>${r0(r.overall)}</span></div>
+      <div><strong>${esc(r.status || '')}${band.interpretation ? ': ' + esc(band.interpretation) : ''}</strong>
+      <p>Your overall InstitutionalOS score out of 100, weighted for the ${esc(STAGE_NAMES[r.stage] || 'Fund')} stage.${band.decision ? ' Recommended posture: <strong style="display:inline;font-size:inherit">' + esc(band.decision) + '</strong>.' : ''}</p></div>
+    </div>
+  </div></section>`;
 }
 
-function renderCompliance(items) {
-if (!items || !items.length) return '<p class="muted">No compliance items on file.</p>';
-return items.map(item => {
-const info = complianceStatusInfo(item);
-const dueText = item.due_date ? new Date(item.due_date + 'T00:00:00').toLocaleDateString() : 'No due date';
-return '<div class="list-item"><div><strong style="' + (item.status === 'done' ? 'text-decoration:line-through; color:var(--ink-soft);' : '') + '">' + item.title + '</strong>' +
-' <span class="pill ' + info.cls + '">' + info.label + '</span>' +
-'<div class="meta muted">' + (item.category ? item.category + ' &middot; ' : '') + dueText + '</div></div></div>';
-}).join('');
+function constraintHtml(r) {
+  const dims = (r.dimensions || []).slice();
+  if (!dims.length) return '';
+  const scored = dims.filter((d) => !/neutral default/i.test(d.note || ''));
+  const low = (scored.length ? scored : dims).sort((a, b) => a.score - b.score)[0];
+  return `<section class="card constraint">
+    <p class="eyebrow" style="color:var(--gold-access)">Your binding constraint</p>
+    <div class="big"><strong>${esc(low.name)}</strong> <span class="target">${r0(low.score)} now &rarr; ${r0(low.liftTarget)} in 90 days</span></div>
+    <p style="margin:0">This is the dimension most likely to limit everything else right now. The 90-day target is a realistic next step: closing a quarter of the remaining gap with evidence you can show a funder or board.</p>
+    ${low.note && !/neutral default|manually entered/i.test(low.note) ? `<p class="muted" style="margin:10px 0 0">${esc(low.note)}</p>` : ''}
+  </section>`;
+}
+
+function dimsHtml(r) {
+  const dims = r.dimensions || [];
+  const rows = dims.map((d) => {
+    const noData = /neutral default/i.test(d.note || '');
+    const cls = noData ? 'none' : d.score < 55 ? 'low' : d.score < 75 ? 'mid' : '';
+    return `<div class="dim">
+      <div class="name">${esc(d.name)}<small>${noData ? 'Not yet scored' : 'Weight ' + r0(d.weight) + '%'}</small></div>
+      <div class="track" role="img" aria-label="${esc(d.name)}: ${r0(d.score)}, target ${r0(d.liftTarget)}">
+        <div class="fill ${cls}" style="width:${Math.max(2, Math.min(100, d.score))}%"></div>
+        ${noData ? '' : `<div class="tick" style="left:calc(${Math.min(100, d.liftTarget)}% - 1px)"></div>`}
+      </div>
+      <div class="nums">${noData ? '<b>&ndash;</b><small>placeholder 50</small>' : `<b>${r0(d.score)}</b><small>target ${r0(d.liftTarget)}</small>`}</div>
+    </div>`;
+  }).join('');
+  const gate = r.hardGate || {};
+  const gates = Object.entries(gate.gates || {}).map(([k, floor]) => {
+    const actual = (r.dimensionScores || {})[k] ?? 50;
+    const ok = actual >= floor;
+    return `<span class="gate ${ok ? 'met' : 'open'}">${esc(KEY_NAMES[k] || k)}: ${r0(actual)} ${ok ? '&#10003; meets ' + floor : '&middot; needs ' + floor}</span>`;
+  }).join('');
+  return `<section class="card">
+    <h2>The seven dimensions</h2>
+    <p class="lead">Each scored 0 to 100 on evidence. The gold mark is your 90-day target.</p>
+    ${rows}
+    <div class="legend"><span><i></i>90-day target</span><span>Below 55 needs attention &middot; 55 to 74 developing &middot; 75+ ready</span></div>
+    ${gates ? `<h3 style="font-size:17px;margin-top:22px">${esc(STAGE_NAMES[r.stage] || 'Fund')}-stage gates</h3>
+      <p class="lead" style="margin-bottom:10px">Minimum scores funders and boards expect at your stage, whatever the average says.</p>
+      <div class="gates">${gates}</div>` : ''}
+  </section>`;
+}
+
+function historyHtml(history) {
+  if (!history || history.length < 2) {
+    return `<section class="card"><h2>Your progress</h2><p class="muted" style="margin:0">Your score history starts here. Each time your diagnostic is updated, this chart shows how far you've moved.</p></section>`;
+  }
+  const W = Math.max(300, Math.min(780, (document.querySelector('.wrap')?.clientWidth || 680) - 50)), H = 190, P = 28;
+  const xs = (i) => P + (i * (W - 2 * P)) / (history.length - 1);
+  const ys = (v) => H - P - (v / 100) * (H - 2 * P);
+  const pts = history.map((h, i) => `${xs(i).toFixed(1)},${ys(h.overall).toFixed(1)}`).join(' ');
+  const first = history[0], last = history[history.length - 1];
+  const delta = r0(last.overall - first.overall);
+  const grid = [25, 50, 75].map((v) => `<line x1="${P}" x2="${W - P}" y1="${ys(v)}" y2="${ys(v)}" stroke="#E2E6EA"/><text x="${P - 6}" y="${ys(v) + 4}" font-size="10" text-anchor="end" fill="#55606B">${v}</text>`).join('');
+  const dots = history.map((h, i) => `<circle cx="${xs(i)}" cy="${ys(h.overall)}" r="4" fill="#11233D"><title>${esc(fmtDate(h.date))}: ${r0(h.overall)}</title></circle>`).join('');
+  return `<section class="card chart">
+    <h2>Your progress</h2>
+    <p class="lead">${delta >= 0 ? 'Up' : 'Down'} ${Math.abs(delta)} point${Math.abs(delta) === 1 ? '' : 's'} since ${esc(fmtDate(first.date))} (${r0(first.overall)} &rarr; ${r0(last.overall)}).</p>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Overall score over time">${grid}
+      <polyline points="${pts}" fill="none" stroke="#B28E42" stroke-width="2.5" stroke-linejoin="round"/>${dots}
+      <text x="${P}" y="${H - 6}" font-size="11" fill="#55606B">${esc(fmtDate(first.date))}</text>
+      <text x="${W - P}" y="${H - 6}" font-size="11" fill="#55606B" text-anchor="end">${esc(fmtDate(last.date))}</text>
+    </svg>
+  </section>`;
+}
+
+function sealHtml(s) {
+  if (!s) return '';
+  const cur = SEAL_LEVELS.indexOf(s.currentName);
+  const ladder = SEAL_LEVELS.map((l, i) => `<span class="rung ${i <= cur ? 'done' : l === s.nextName ? 'next' : ''}">${l}</span>`).join('<span class="muted">&rarr;</span>');
+  const steps = (s.steps || []).map((x) => `<li><strong>${esc(x.requirement)}</strong>: ${esc(x.step)} <span class="muted">(${esc(KEY_NAMES[x.dimension] || x.dimension)})</span></li>`).join('');
+  return `<section class="card">
+    <h2>Your Candid Seal path</h2>
+    <p class="lead">Candid's Seals of Transparency are what many funders check first. ${s.nextName ? 'Your next level is <strong>' + esc(s.nextName) + '</strong>.' : 'You hold the highest level; keep it current each year.'}</p>
+    <div class="ladder">${ladder}</div>
+    ${steps ? '<ol class="steps">' + steps + '</ol>' : ''}
+    <p class="muted" style="margin:10px 0 0">${esc(s.note || '')} Frankly Inspired is not affiliated with Candid.</p>
+  </section>`;
+}
+
+function complianceHtml(items) {
+  if (!items || !items.length) return '';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const rows = items.map((it) => {
+    let pill = ['green', 'Upcoming'];
+    if (it.status === 'done') pill = ['green', 'Done'];
+    else if (!it.due_date) pill = ['amber', 'No date'];
+    else {
+      const days = Math.round((new Date(it.due_date + 'T00:00:00') - today) / 86400000);
+      if (days < 0) pill = ['red', 'Overdue']; else if (days <= 30) pill = ['amber', 'Due soon'];
+    }
+    return `<div class="item"><div><strong${it.status === 'done' ? ' style="text-decoration:line-through;color:var(--muted)"' : ''}>${esc(it.title)}</strong>
+      <div class="muted">${it.category ? esc(it.category) + ' &middot; ' : ''}${it.due_date ? esc(fmtDate(it.due_date)) : 'No due date'}</div></div>
+      <span class="pill ${pill[0]}">${pill[1]}</span></div>`;
+  }).join('');
+  return `<section class="card"><h2>Compliance calendar</h2><p class="lead">Filings and renewals we're tracking with you.</p>${rows}</section>`;
+}
+
+function donorHtml(d) {
+  if (!d || !d.hasData || d.averageScore == null) return '';
+  return `<section class="card"><h2>Donor sustainability</h2>
+    <p style="margin:0"><strong style="font-family:var(--font-heading);font-size:28px;color:var(--navy)">${r0(d.averageScore)}</strong> <span class="muted">average across ${d.responseCount} stewardship assessment${d.responseCount === 1 ? '' : 's'}</span></p></section>`;
+}
+
+function nextHtml() {
+  return `<section class="card no-print">
+    <h2>What happens next</h2>
+    <div class="next-grid">
+      <div><h3>Talk it through</h3><p>A 30-minute call to agree on the first move against your binding constraint.</p><a class="btn btn-gold" href="${CALENDLY}" target="_blank" rel="noopener">Schedule a call</a></div>
+      <div><h3>Update your self-check</h3><p>Retake the free tools to keep your Health Index current between diagnostics.</p><a class="btn btn-ghost" href="${SITE}/health-index">Open your Health Index</a></div>
+      <div><h3>Keep a copy</h3><p>Save or print this page to share with your board.</p><div class="actions"><button class="btn btn-ghost" type="button" onclick="window.print()">Print or save PDF</button></div></div>
+    </div>
+  </section>`;
 }
 
 async function load() {
-const el = document.getElementById('content');
-const params = new URLSearchParams(location.search);
-const token = params.get('token');
-if (!token) { el.innerHTML = '<p class="status-msg error">Missing report link token.</p>'; return; }
-try {
-const res = await fetch(API_BASE + '/public/report/' + encodeURIComponent(token));
-const data = await res.json();
-if (!res.ok) throw new Error(data.error || 'Could not load this report.');
-el.innerHTML =
-'<div class="panel"><h2>' + data.org.name + '</h2>' +
-'<h3>Readiness</h3>' + renderScoreCard(data.readiness) +
-'<h3>Donor Sustainability</h3>' + renderDonor(data.donorSustainability) +
-'<h3>Compliance Calendar</h3>' + renderCompliance(data.compliance) +
-'</div>';
-} catch (e) {
-el.innerHTML = '<p class="status-msg error">' + e.message + '</p>';
-}
+  const app = document.getElementById('app');
+  const token = new URLSearchParams(location.search).get('token');
+  if (!token) {
+    app.innerHTML = '<div class="wrap state"><h1>Report link needed</h1><p class="muted">Open the private link Franklin sent you. If you can’t find it, email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a>.</p></div>';
+    return;
+  }
+  try {
+    const d = await fetchReport(token);
+    document.title = d.org.name + ' | InstitutionalOS Report';
+    app.innerHTML = heroHtml(d) + '<main><div class="wrap">' +
+      constraintHtml(d.readiness || {}) + dimsHtml(d.readiness || {}) + historyHtml(d.history) +
+      sealHtml((d.readiness || {}).candidSeal) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + nextHtml() +
+      '</div></main>';
+  } catch (e) {
+    app.innerHTML = '<div class="wrap state"><h1>We couldn’t open this report</h1><p class="error">' + esc(e.message) + '</p><p class="muted">Email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a> and he’ll send a fresh link.</p></div>';
+  }
 }
 load();
 </script>

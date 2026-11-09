@@ -1331,7 +1331,18 @@ class Handler(BaseHTTPRequestHandler):
             "SELECT title, category, due_date, status FROM compliance_items WHERE org_id=? "
             "ORDER BY (due_date IS NULL), due_date ASC", (org_id,)
         ).fetchall()
+        # Overall score over time, so the client page can show progress
+        # between diagnostics (one point per day, latest score that day).
+        history_rows = conn.execute(
+            "SELECT overall, computed_at FROM readiness_scores WHERE org_id=? ORDER BY computed_at ASC", (org_id,)
+        ).fetchall()
         conn.close()
+        by_day = {}
+        for r in history_rows:
+            day = str(r["computed_at"])[:10]
+            if day and r["overall"] is not None:
+                by_day[day] = round(float(r["overall"]), 1)
+        history = [{"date": d, "overall": v} for d, v in sorted(by_day.items())][-24:]
 
         donor = {"hasData": False, "responseCount": 0, "averageScore": None}
         if rows:
@@ -1345,6 +1356,7 @@ class Handler(BaseHTTPRequestHandler):
             "readiness": readiness,
             "donorSustainability": donor,
             "compliance": [dict(r) for r in compliance_rows],
+            "history": history,
         })
 
 def main():

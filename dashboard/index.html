@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>InstitutionalOS Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     color-scheme: light;
@@ -19,7 +22,8 @@
     --green: #1E7A4C; --green-bg: #E4F3EC;
   }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  h1, h2, .logo { font-family:"Playfair Display",Georgia,serif; letter-spacing:-.01em; }
   .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px 24px; }
   header { display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg,var(--navy),var(--navy-deep)); padding:18px 24px; margin:0 -24px 24px; border-radius:0 0 14px 14px; }
   .logo { font-weight:800; font-size:19px; color:#fff; }
@@ -120,7 +124,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">InstitutionalOS <span>Console</span></div>
+    <div><div class="logo">InstitutionalOS <span>Console</span></div><a href="https://franklyinspired.associates" style="color:#CBA869;font-size:12.5px;text-decoration:none">&larr; Frankly Inspired and Associates</a></div>
     <div class="api-row">
       <span>API:</span>
       <input id="apiUrl" value="https://grantpass-backend-600997839134.us-central1.run.app">
@@ -1268,7 +1272,9 @@ statusEl.className = 'status-msg';
 statusEl.textContent = 'Generating...';
 try {
 const data = await api('POST', `/orgs/${selectedOrgId}/share`);
-const url = location.origin + '/report.html?token=' + data.shareToken;
+// The link carries this console's API address, so the client page reads
+// from the same database that issued the token.
+const url = location.origin + '/report.html?token=' + data.shareToken + '&api=' + encodeURIComponent(apiUrl());
 statusEl.className = 'status-msg ok';
 statusEl.textContent = 'Ready to share.';
 resultEl.innerHTML = '<div class="row" style="grid-template-columns:1fr auto; gap:8px; align-items:start;">' +
