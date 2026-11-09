@@ -158,7 +158,7 @@
 </head>
 <body>
 
-<div class="breadcrumb"><div class="wrap">Part of <a href="https://frankly-inspired-website-astro.onrender.com">Frankly Inspired and Associates, LLC</a></div></div>
+<div class="breadcrumb"><div class="wrap">Part of <a href="https://franklyinspired.associates">Frankly Inspired and Associates, LLC</a></div></div>
 
 <header>
   <div class="wrap">
@@ -166,7 +166,7 @@
     <nav>
       <a href="#how">How it works</a>
       <a href="#demo">Free Scorecard</a>
-      <a href="https://frankly-inspired-website-astro.onrender.com/assessment">Self-Assessment</a>
+      <a href="https://franklyinspired.associates/assessment">Self-Assessment</a>
       <a href="#demo" class="btn btn-primary">Score My Org</a>
     </nav>
   </div>
@@ -299,7 +299,7 @@
       <h3>Want the full guided Review?</h3>
       <p>This free scorecard is the self-service read. The full Review is a guided diagnostic where Franklin scores your organization directly — Revenue and Financial Health pulled from your actual filed Form 990 data, a written rationale behind every dimension, and (for FUND) a weighted ranking against the specific funders you're targeting.</p>
       <div class="hero-ctas">
-        <a class="btn btn-primary" id="ctaPricing" href="https://frankly-inspired-website-astro.onrender.com/#pricing">See Pricing</a>
+        <a class="btn btn-primary" id="ctaPricing" href="https://franklyinspired.associates/#pricing">See Pricing</a>
         <a class="btn btn-ghost" id="ctaSchedule" href="https://calendly.com/fparham/30min" target="_blank" rel="noopener">Schedule a Conversation</a>
       </div>
     </div>
@@ -309,13 +309,13 @@
 <footer>
   <div class="wrap">
     InstitutionalOS is a diagnostic tool from Frankly Inspired and Associates, LLC. Scores are estimates for illustration and are not a substitute for a funder's actual review, financial advice, or legal advice.
-    <br>© 2026 Frankly Inspired and Associates, LLC · <a href="https://frankly-inspired-website-astro.onrender.com">franklyinspired.associates</a>
+    <br>© 2026 Frankly Inspired and Associates, LLC · <a href="https://franklyinspired.associates">franklyinspired.associates</a>
   </div>
 </footer>
 
 <script>
 const API_BASE = "https://grantpass-backend.onrender.com";
-const CONSULTING_BASE = "https://frankly-inspired-website-astro.onrender.com";
+const CONSULTING_BASE = "https://franklyinspired.associates";
 
 // Fire-and-forget funnel instrumentation: page views, which stage gets
 // picked, and clicks on the two bottom CTAs. Never blocks the UI and never
@@ -564,7 +564,7 @@ function renderLeadCapture(data) {
   }
   el.classList.remove("hidden");
   el.innerHTML = `
-    <div class="lc-text">Want this emailed to you, or a link to come back to it later? Optional, no spam, just this.</div>
+    <div class="lc-text">Want Franklin to follow up on this result? Leave your email and he'll be in touch personally. Optional, no mailing list.</div>
     <input type="email" id="lcEmail" placeholder="you@organization.org">
     <button class="btn btn-primary" id="lcSave" type="button">Send it to me</button>
     <button class="lc-dismiss" id="lcDismiss" type="button">No thanks</button>
@@ -584,7 +584,7 @@ function renderLeadCapture(data) {
         body: JSON.stringify({ demoScoreLogId: data.demoScoreLogId, email })
       });
       if (!res.ok) throw new Error("save failed");
-      el.innerHTML = '<span class="lc-sent">Got it. You can reference this result by email whenever you\'re ready.</span>';
+      el.innerHTML = '<span class="lc-sent">Got it. Franklin will follow up personally about this result.</span>';
     } catch (e) {
       textEl.textContent = "Couldn't save that just now. No worries, your result above is still yours to screenshot or bookmark.";
     }

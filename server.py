@@ -21,6 +21,7 @@ import db
 import demo_scoring
 import parsing
 import scoring
+import os_sync
 
 db.init_db()
 
@@ -1072,7 +1073,14 @@ class Handler(BaseHTTPRequestHandler):
         conn = db.get_conn()
         conn.execute("UPDATE demo_score_log SET email=? WHERE id=?", (email, log_id))
         conn.commit()
+        row = conn.execute(
+            "SELECT id, overall, dimensions_json, stage, org_name FROM demo_score_log WHERE id=?", (log_id,)
+        ).fetchone()
         conn.close()
+        # Straight into the operations app's Prospecting view (best effort;
+        # sourceRef "scorecard-<id>" keeps repeats from duplicating).
+        if row:
+            os_sync.push_prospect(dict(row), email)
         return json_response(self, 200, {"ok": True})
 
     DEMO_EVENT_TYPES = {"page_view", "stage_selected", "cta_pricing", "cta_schedule"}
