@@ -10,6 +10,7 @@ Run:
 See README.md for the full API reference and curl examples.
 """
 import json
+import urllib.parse
 import os
 import re
 import secrets
@@ -1079,9 +1080,23 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         # Straight into the operations app's Prospecting view (best effort;
         # sourceRef "scorecard-<id>" keeps repeats from duplicating).
+        emailed = False
         if row:
-            os_sync.push_prospect(dict(row), email)
-        return json_response(self, 200, {"ok": True})
+            row = dict(row)
+            os_added = os_sync.push_prospect(row, email)
+            overall = row.get("overall") or 0
+            band_info = scoring.decision_band_for(overall) or {}
+            band = band_info.get("interpretation") or ""
+            stage = row.get("stage") or scoring.DEFAULT_STAGE
+            ref = auth.make_score_ref(stage=stage, score=overall, band=band, source="demo")
+            continue_url = (
+                "https://franklyinspired.associates/?score_ref=" + urllib.parse.quote(ref)
+                + "&stage=" + urllib.parse.quote(stage) + "#contact"
+            ) if ref else ""
+            emailed = os_sync.send_results_email(
+                row, email, os_added, band=band, decision=band_info.get("decision") or "", continue_url=continue_url
+            )
+        return json_response(self, 200, {"ok": True, "emailed": emailed})
 
     DEMO_EVENT_TYPES = {"page_view", "stage_selected", "cta_pricing", "cta_schedule"}
 

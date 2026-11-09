@@ -564,7 +564,7 @@ function renderLeadCapture(data) {
   }
   el.classList.remove("hidden");
   el.innerHTML = `
-    <div class="lc-text">Want Franklin to follow up on this result? Leave your email and he'll be in touch personally. Optional, no mailing list.</div>
+    <div class="lc-text">Want this result emailed to you? Franklin may also follow up personally. Optional, no mailing list.</div>
     <input type="email" id="lcEmail" placeholder="you@organization.org">
     <button class="btn btn-primary" id="lcSave" type="button">Send it to me</button>
     <button class="lc-dismiss" id="lcDismiss" type="button">No thanks</button>
@@ -584,7 +584,10 @@ function renderLeadCapture(data) {
         body: JSON.stringify({ demoScoreLogId: data.demoScoreLogId, email })
       });
       if (!res.ok) throw new Error("save failed");
-      el.innerHTML = '<span class="lc-sent">Got it. Franklin will follow up personally about this result.</span>';
+      const out = await res.json().catch(() => ({}));
+      el.innerHTML = out.emailed
+        ? '<span class="lc-sent">Sent. Check your inbox for your result.</span>'
+        : '<span class="lc-sent">Got it. Franklin will follow up personally about this result.</span>';
     } catch (e) {
       textEl.textContent = "Couldn't save that just now. No worries, your result above is still yours to screenshot or bookmark.";
     }
