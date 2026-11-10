@@ -222,6 +222,13 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "POST":
                 return self._set_org_candid_seal(int(m.group(1)))
 
+            m = re.match(r"^/orgs/(\d+)/diagnostic-record$", path)
+            if m and method == "POST":
+                return self._set_diagnostic_record(int(m.group(1)))
+
+            if path == "/orgs/hidden-problem-rate" and method == "GET":
+                return self._hidden_problem_rate()
+
             m = re.match(r"^/orgs/(\d+)/portal$", path)
             if m and method == "POST":
                 return self._set_org_portal(int(m.group(1)))
@@ -387,7 +394,7 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 401, {"error": "auth required"})
         conn = db.get_conn()
         rows = conn.execute(
-            "SELECT id, name, ein, description, stage, candid_seal, next_session_at, next_session_note, documents_url, created_at FROM organizations WHERE user_id=?", (user_id,)
+            "SELECT id, name, ein, description, stage, candid_seal, next_session_at, next_session_note, documents_url, diagnostic_record, created_at FROM organizations WHERE user_id=?", (user_id,)
         ).fetchall()
         conn.close()
         return json_response(self, 200, {"organizations": [dict(r) for r in rows]})
@@ -447,6 +454,68 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         conn.close()
         return json_response(self, 200, {"id": org_id, "candidSeal": level})
+
+    TRIGGERS = ("expansion", "funder", "founder", "strain", "transition", "checkup")
+
+    def _set_diagnostic_record(self, org_id):
+        """Body: {trigger, presentingProblem, verifiedConstraint, nextInLine,
+        differs: true|false|null, closeout: {changes, evidence, risks, owner,
+        reassessOn, callAgain}}. Stored whole; the client portal shows it."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        clip = lambda v, n: str(v or "").strip()[:n]
+        co = data.get("closeout") or {}
+        reassess = clip(co.get("reassessOn"), 10)
+        if reassess and not re.match(r"^\d{4}-\d{2}-\d{2}$", reassess):
+            return json_response(self, 400, {"error": "reassessOn must be YYYY-MM-DD"})
+        record = {
+            "trigger": data.get("trigger") if data.get("trigger") in self.TRIGGERS else "",
+            "presentingProblem": clip(data.get("presentingProblem"), 1000),
+            "verifiedConstraint": clip(data.get("verifiedConstraint"), 1000),
+            "nextInLine": clip(data.get("nextInLine"), 500),
+            "differs": data.get("differs") if isinstance(data.get("differs"), bool) else None,
+            "closeout": {
+                "changes": clip(co.get("changes"), 2000),
+                "evidence": clip(co.get("evidence"), 2000),
+                "risks": clip(co.get("risks"), 2000),
+                "owner": clip(co.get("owner"), 200),
+                "reassessOn": reassess,
+                "callAgain": clip(co.get("callAgain"), 1000),
+            },
+        }
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        conn.execute("UPDATE organizations SET diagnostic_record=? WHERE id=?", (json.dumps(record), org_id))
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"id": org_id, "record": record})
+
+    def _hidden_problem_rate(self):
+        """Across this consultant's organizations: how often the verified
+        constraint differed from the presenting problem, among records
+        where that is known."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        rows = conn.execute("SELECT diagnostic_record FROM organizations WHERE user_id=?", (user_id,)).fetchall()
+        conn.close()
+        known = differed = 0
+        for r in rows:
+            try:
+                rec = json.loads(r["diagnostic_record"] or "{}")
+            except Exception:
+                continue
+            if isinstance(rec.get("differs"), bool):
+                known += 1
+                differed += 1 if rec["differs"] else 0
+        return json_response(self, 200, {"known": known, "differed": differed,
+                                         "rate": round(100 * differed / known) if known else None})
 
     def _set_org_portal(self, org_id):
         """Body: {"nextSessionAt": "YYYY-MM-DDTHH:MM" or "", "nextSessionNote":
@@ -1422,6 +1491,10 @@ class Handler(BaseHTTPRequestHandler):
                 "nextSessionNote": (org["next_session_note"] if "next_session_note" in keys else "") or "",
                 "documentsUrl": (org["documents_url"] if "documents_url" in keys else "") or "",
             }
+            try:
+                portal["record"] = json.loads(org["diagnostic_record"] or "{}") if "diagnostic_record" in keys else {}
+            except Exception:
+                portal["record"] = {}
 
         donor = {"hasData": False, "responseCount": 0, "averageScore": None}
         if rows:

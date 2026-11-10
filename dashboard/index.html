@@ -202,6 +202,7 @@
 
       <div class="panel" id="orgListPanel">
         <h2>Your Organizations</h2>
+        <p class="hint" id="hiddenRate">Hidden-problem rate: no completed Diagnostic records yet.</p>
         <div id="orgList"><p class="muted">Loading...</p></div>
       </div>
 
@@ -239,6 +240,43 @@
         <div id="evidenceVaultResult"><p class="muted">Loading...</p></div>
 
         
+<h3>Diagnostic Record</h3>
+<p class="hint">Write the presenting problem at intake, in the client's words, before scoring. Add the verified constraint, next in line, and closeout as the Diagnostic finishes. The client portal shows all of it; the hidden-problem rate above counts every record where "differed" is set.</p>
+<div id="recordBlock">
+  <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
+    <div><label for="recTrigger">What brought them in</label>
+      <select id="recTrigger">
+        <option value="">Not recorded</option>
+        <option value="expansion">Expansion: new site, city, or program</option>
+        <option value="funder">Funder readiness or grant ending</option>
+        <option value="founder">Founder or ED dependence</option>
+        <option value="strain">Growth without capacity</option>
+        <option value="transition">Leadership transition</option>
+        <option value="checkup">No trigger, check-up</option>
+      </select></div>
+    <div><label for="recDiffers">Verified constraint vs. presenting problem</label>
+      <select id="recDiffers"><option value="">Not known yet</option><option value="yes">Differed</option><option value="no">Matched</option></select></div>
+  </div>
+  <label for="recPresenting">Presenting problem (their words, at intake)</label>
+  <textarea id="recPresenting" rows="2" maxlength="1000"></textarea>
+  <label for="recVerified">Verified constraint</label>
+  <textarea id="recVerified" rows="2" maxlength="1000"></textarea>
+  <label for="recNext">Next in line</label>
+  <input type="text" id="recNext" maxlength="500">
+  <details style="margin:10px 0;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Closeout (fill at the end of the engagement)</summary>
+    <label for="coChanges">What changed</label><textarea id="coChanges" rows="2"></textarea>
+    <label for="coEvidence">Evidence created</label><textarea id="coEvidence" rows="2"></textarea>
+    <label for="coRisks">Remaining risks</label><textarea id="coRisks" rows="2"></textarea>
+    <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
+      <div><label for="coOwner">Client owner</label><input type="text" id="coOwner"></div>
+      <div><label for="coReassess">Reassessment date</label><input type="date" id="coReassess"></div>
+    </div>
+    <label for="coCall">When to call us again</label><textarea id="coCall" rows="2"></textarea>
+  </details>
+  <button class="btn btn-primary btn-sm" id="saveRecordBtn">Save Diagnostic record</button>
+  <div class="status-msg" id="recordStatus"></div>
+</div>
+
 <h3>Client Portal</h3>
 <p class="hint">The client's own private page: scores and 90-day targets, progress updates, funding outcomes, Candid Seal steps, compliance calendar, the next session, and their documents folder. Different from the funder link below, which leaves out outcomes and session details.</p>
 <div id="portalBlock">
@@ -925,6 +963,7 @@ async function loadOrgs() {
   try {
     const data = await api('GET', '/orgs');
     orgs = data.organizations || [];
+    loadHiddenRate();
     if (orgs.length === 0) { listEl.innerHTML = '<p class="muted">No organizations yet — create one above.</p>'; return; }
     listEl.innerHTML = '';
     orgs.forEach(org => {
@@ -1028,6 +1067,7 @@ async function selectOrg(id) {
   document.getElementById('orgDetailName').textContent = org ? org.name : 'Organization';
   document.getElementById('orgDetailStage').value = (org && org.stage) || 'FUND';
   document.getElementById('orgDetailSeal').value = (org && org.candid_seal) || '';
+  fillRecord(org);
   document.getElementById('portalSessionAt').value = (org && org.next_session_at) || '';
   document.getElementById('portalSessionNote').value = (org && org.next_session_note) || '';
   document.getElementById('portalDocsUrl').value = (org && org.documents_url) || '';
@@ -1304,6 +1344,47 @@ loadCompliance(selectedOrgId);
 statusEl.className = 'status-msg error';
 statusEl.textContent = e.message;
 }
+});
+
+// ---------- DIAGNOSTIC RECORD ----------
+function parseRecord(org) {
+  try { return JSON.parse((org && org.diagnostic_record) || '{}') || {}; } catch (e) { return {}; }
+}
+function fillRecord(org) {
+  const r = parseRecord(org), co = r.closeout || {};
+  const set = (id, v) => { document.getElementById(id).value = v || ''; };
+  set('recTrigger', r.trigger); set('recPresenting', r.presentingProblem); set('recVerified', r.verifiedConstraint); set('recNext', r.nextInLine);
+  set('recDiffers', r.differs === true ? 'yes' : r.differs === false ? 'no' : '');
+  set('coChanges', co.changes); set('coEvidence', co.evidence); set('coRisks', co.risks); set('coOwner', co.owner); set('coReassess', co.reassessOn); set('coCall', co.callAgain);
+  document.getElementById('recordStatus').textContent = '';
+}
+async function loadHiddenRate() {
+  const el = document.getElementById('hiddenRate');
+  try {
+    const d = await api('GET', '/orgs/hidden-problem-rate');
+    el.textContent = d.known
+      ? `Hidden-problem rate: ${d.rate}% (the verified constraint differed from the presenting problem in ${d.differed} of ${d.known} Diagnostics).`
+      : 'Hidden-problem rate: no completed Diagnostic records yet.';
+  } catch (e) { /* the rest of the console still works */ }
+}
+document.getElementById('saveRecordBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('recordStatus');
+  const v = (id) => document.getElementById(id).value.trim();
+  const differs = v('recDiffers');
+  const body = {
+    trigger: v('recTrigger'), presentingProblem: v('recPresenting'), verifiedConstraint: v('recVerified'), nextInLine: v('recNext'),
+    differs: differs === 'yes' ? true : differs === 'no' ? false : null,
+    closeout: { changes: v('coChanges'), evidence: v('coEvidence'), risks: v('coRisks'), owner: v('coOwner'), reassessOn: v('coReassess'), callAgain: v('coCall') },
+  };
+  st.className = 'status-msg'; st.textContent = 'Saving...';
+  try {
+    const data = await api('POST', `/orgs/${selectedOrgId}/diagnostic-record`, body);
+    const org = orgs.find(o => o.id === selectedOrgId);
+    if (org) org.diagnostic_record = JSON.stringify(data.record);
+    st.className = 'status-msg ok'; st.textContent = 'Saved.';
+    loadHiddenRate();
+  } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
 });
 
 // ---------- CLIENT PORTAL ----------

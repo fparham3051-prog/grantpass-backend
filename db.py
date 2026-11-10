@@ -293,6 +293,10 @@ def init_db():
         # Separate from share_token (the funder link): the client's own
         # portal link also shows outcomes, updates, and session details.
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS client_token TEXT;"
+        # The Diagnostic record (JSON): trigger, presenting problem in the
+        # client's words, verified constraint, next in line, whether they
+        # differed, and the closeout. Feeds the hidden-problem rate.
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS diagnostic_record TEXT DEFAULT '';"
     )
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")

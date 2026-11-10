@@ -339,6 +339,28 @@ function outcomesHtml(list) {
   return `<section class="card"><h2>Funding results</h2><p class="lead">Applications and decisions we've tracked together.</p>${rows}</section>`;
 }
 
+function recordHtml(p) {
+  const r = (p && p.record) || {};
+  if (!r.presentingProblem && !r.verifiedConstraint) return '';
+  return `<section class="card">
+    <h2>What we found</h2>
+    <div class="next-grid">
+      ${r.presentingProblem ? `<div><h3>What you told us</h3><p>${esc(r.presentingProblem)}</p></div>` : ''}
+      ${r.verifiedConstraint ? `<div><h3>What the evidence showed</h3><p>${esc(r.verifiedConstraint)}</p></div>` : ''}
+      ${r.nextInLine ? `<div><h3>Next in line</h3><p>${esc(r.nextInLine)}</p></div>` : ''}
+    </div>
+  </section>`;
+}
+
+function closeoutHtml(p) {
+  const c = ((p && p.record) || {}).closeout || {};
+  const rows = [['What changed', c.changes], ['Evidence created', c.evidence], ['Remaining risks', c.risks], ['Who owns it now', c.owner], ['Reassessment', c.reassessOn ? fmtDate(c.reassessOn) : ''], ['When to call us again', c.callAgain]]
+    .filter(([, v]) => v);
+  if (!rows.length) return '';
+  return `<section class="card"><h2>Engagement closeout</h2>
+    ${rows.map(([k, v]) => `<div class="item"><div><strong>${esc(k)}</strong><div>${esc(v)}</div></div></div>`).join('')}</section>`;
+}
+
 function funderNoteHtml() {
   return `<section class="card"><h2>About this report</h2><p style="margin:0">InstitutionalOS scores an organization on seven dimensions using evidence, not self-description: filed Form 990 data where available, and documents reviewed by Frankly Inspired and Associates. <a href="${SITE}/methodology" target="_blank" rel="noopener">How scoring works</a>.</p></section>`;
 }
@@ -367,7 +389,7 @@ async function load() {
     const d = await fetchReport(token, !!client);
     document.title = d.org.name + (client ? ' | Client Portal' : ' | InstitutionalOS Report');
     app.innerHTML = heroHtml(d) + '<main><div class="wrap">' + (client ? sessionHtml(d.portal) : '') +
-      constraintHtml(d.readiness || {}) + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) : '') +
+      constraintHtml(d.readiness || {}) + (client ? recordHtml(d.portal) : '') + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) + closeoutHtml(d.portal) : '') +
       sealHtml((d.readiness || {}).candidSeal) + (client ? outcomesHtml(d.outcomes) : '') + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + (client ? nextHtml() : funderNoteHtml()) +
       '</div></main>';
   } catch (e) {
