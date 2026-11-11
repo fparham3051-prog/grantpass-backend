@@ -50,10 +50,20 @@ def get_integration_user(handler):
     key = os.environ.get("INTEGRATION_KEY") or ""
     email = (os.environ.get("INTEGRATION_USER_EMAIL") or "").strip().lower()
     provided = handler.headers.get("X-Integration-Key", "")
-    if not (key and email and provided and hmac_compare(provided, key)):
+    if not (key and provided and hmac_compare(provided, key)):
         return None
     conn = db.get_conn()
-    row = conn.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
+    row = None
+    if email:
+        row = conn.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
+    if not row:
+        # Not set (or no such login): act as the console account that holds
+        # the most clients, which is Franklin's working account. The email it
+        # resolved to is reported back by GET /integration/orgs ("actingAs").
+        row = conn.execute(
+            "SELECT u.id FROM users u LEFT JOIN organizations o ON o.user_id = u.id "
+            "GROUP BY u.id ORDER BY COUNT(o.id) DESC, u.id ASC LIMIT 1"
+        ).fetchone()
     conn.close()
     return row["id"] if row else None
 
@@ -586,6 +596,7 @@ class Handler(BaseHTTPRequestHandler):
         rows = conn.execute(
             "SELECT id, name, external_ref, diagnostic_record, created_at FROM organizations WHERE user_id=? ORDER BY id", (user_id,)
         ).fetchall()
+        who = conn.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
         conn.close()
         out = []
         for r in rows:
@@ -596,7 +607,7 @@ class Handler(BaseHTTPRequestHandler):
             co = rec.get("closeout") or {}
             out.append({"orgId": r["id"], "name": r["name"], "externalRef": r["external_ref"] or "",
                         "differs": rec.get("differs"), "reassessOn": co.get("reassessOn") or "", "createdAt": r["created_at"]})
-        return json_response(self, 200, {"organizations": out})
+        return json_response(self, 200, {"organizations": out, "actingAs": who["email"] if who else ""})
 
     def _set_diagnostic_record(self, org_id):
         """Body: {trigger, presentingProblem, verifiedConstraint, nextInLine,
