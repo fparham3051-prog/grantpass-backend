@@ -42,6 +42,65 @@ def get_auth_user(handler):
         return None
     return auth.verify_token(header[7:])
 
+def get_integration_user(handler):
+    """Service-to-service access for the operations app (FIOS). The caller
+    sends X-Integration-Key = INTEGRATION_KEY and acts as the console user
+    whose email is INTEGRATION_USER_EMAIL (Franklin's console login), so
+    clients it creates appear in his console. None if not configured."""
+    key = os.environ.get("INTEGRATION_KEY") or ""
+    email = (os.environ.get("INTEGRATION_USER_EMAIL") or "").strip().lower()
+    provided = handler.headers.get("X-Integration-Key", "")
+    if not (key and email and provided and hmac_compare(provided, key)):
+        return None
+    conn = db.get_conn()
+    row = conn.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
+    conn.close()
+    return row["id"] if row else None
+
+
+DIM_TO_SITE_KEY = {"financial": "revenue"}  # console key -> website key
+
+
+def org_summary(conn, org_id):
+    """What FIOS needs to know about a linked client after any change."""
+    org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
+    if not org or not org["external_ref"]:
+        return None
+    r = score_org(conn, org_id)
+    try:
+        record = json.loads(org["diagnostic_record"] or "{}")
+    except Exception:
+        record = {}
+    dims = r.get("dimensions") or []
+    scored = [d for d in dims if "neutral default" not in (d.get("note") or "").lower()]
+    low = min(scored or dims, key=lambda d: d["score"]) if dims else None
+    return {
+        "externalRef": org["external_ref"],
+        "orgId": org_id,
+        "name": org["name"],
+        "stage": r.get("stage"),
+        "overall": r.get("overall"),
+        "decision": (r.get("decisionBand") or {}).get("decision"),
+        "lowestDimension": low["name"] if low else None,
+        "dimensions": [{"name": d["name"], "score": d["score"], "liftTarget": d["liftTarget"]} for d in dims],
+        "record": record,
+        "nextSessionAt": org["next_session_at"] or "",
+        "nextSessionNote": org["next_session_note"] or "",
+    }
+
+
+def sync_to_fios(org_id):
+    """Push a linked client's current state to FIOS (background, best effort)."""
+    try:
+        conn = db.get_conn()
+        summary = org_summary(conn, org_id)
+        conn.close()
+        if summary:
+            os_sync.push_diagnostic(summary)
+    except Exception as exc:  # noqa: BLE001 - never break the console save
+        print(f"sync_to_fios failed for org {org_id}: {exc}")
+
+
 def check_admin_secret(handler) -> bool:
     """Shared-secret check for practice-internal reporting endpoints (the
     funnel summary), same pattern as check_ingest_secret below. Set
@@ -226,6 +285,11 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "POST":
                 return self._set_diagnostic_record(int(m.group(1)))
 
+            if path == "/integration/orgs" and method == "POST":
+                return self._integration_link_org()
+            if path == "/integration/orgs" and method == "GET":
+                return self._integration_list_orgs()
+
             if path == "/orgs/hidden-problem-rate" and method == "GET":
                 return self._hidden_problem_rate()
 
@@ -394,7 +458,7 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 401, {"error": "auth required"})
         conn = db.get_conn()
         rows = conn.execute(
-            "SELECT id, name, ein, description, stage, candid_seal, next_session_at, next_session_note, documents_url, diagnostic_record, created_at FROM organizations WHERE user_id=?", (user_id,)
+            "SELECT id, name, ein, description, stage, candid_seal, next_session_at, next_session_note, documents_url, diagnostic_record, external_ref, self_scores, created_at FROM organizations WHERE user_id=?", (user_id,)
         ).fetchall()
         conn.close()
         return json_response(self, 200, {"organizations": [dict(r) for r in rows]})
@@ -453,9 +517,86 @@ class Handler(BaseHTTPRequestHandler):
         conn.execute("UPDATE organizations SET candid_seal=? WHERE id=?", (level, org_id))
         conn.commit()
         conn.close()
+        sync_to_fios(org_id)
         return json_response(self, 200, {"id": org_id, "candidSeal": level})
 
     TRIGGERS = ("expansion", "funder", "founder", "strain", "transition", "checkup")
+
+    def _integration_link_org(self):
+        """FIOS calls this when a deal reaches the Diagnostic stage. Body:
+        {externalRef, name, stage, trigger, presentingProblem, selfScores}.
+        Creates the client, or finds the one already linked to that deal,
+        fills only what is still empty, and returns its portal token."""
+        user_id = get_integration_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "integration key required"})
+        data = self._read_json()
+        ref = str(data.get("externalRef") or "").strip()[:80]
+        name = str(data.get("name") or "").strip()[:200]
+        if not ref or not name:
+            return json_response(self, 400, {"error": "externalRef and name required"})
+        stage = str(data.get("stage") or "").strip().upper()
+        stage = stage if stage in scoring.STAGE_WEIGHTS else scoring.DEFAULT_STAGE
+        self_scores = {}
+        for k, v in (data.get("selfScores") or {}).items():
+            if isinstance(v, (int, float)) and k in ("strategy", "program", "revenue", "leadership", "operations", "partnerships", "governance"):
+                self_scores[k] = max(0, min(100, round(float(v))))
+        conn = db.get_conn()
+        org = conn.execute("SELECT * FROM organizations WHERE external_ref=? AND user_id=?", (ref, user_id)).fetchone()
+        created = False
+        if not org:
+            cur = conn.execute(
+                "INSERT INTO organizations (user_id, name, stage, external_ref, created_at) VALUES (?,?,?,?,?) RETURNING id",
+                (user_id, name, stage, ref, db.now()),
+            )
+            org_id = cur.fetchone()["id"]
+            created = True
+            org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
+        org_id = org["id"]
+        try:
+            record = json.loads(org["diagnostic_record"] or "{}") or {}
+        except Exception:
+            record = {}
+        trig = data.get("trigger")
+        if not record.get("trigger") and trig in self.TRIGGERS:
+            record["trigger"] = trig
+        if not record.get("presentingProblem") and data.get("presentingProblem"):
+            record["presentingProblem"] = str(data["presentingProblem"]).strip()[:1000]
+        updates = {"diagnostic_record": json.dumps(record)}
+        if self_scores and not (org["self_scores"] or ""):
+            updates["self_scores"] = json.dumps(self_scores)
+        token = org["client_token"]
+        if not token:
+            token = secrets.token_urlsafe(18)
+            updates["client_token"] = token
+        conn.execute(
+            "UPDATE organizations SET " + ", ".join(f"{k}=?" for k in updates) + " WHERE id=?",
+            (*updates.values(), org_id),
+        )
+        conn.commit()
+        conn.close()
+        return json_response(self, 201 if created else 200, {"orgId": org_id, "clientToken": token, "created": created})
+
+    def _integration_list_orgs(self):
+        """For the daily reconciliation: every client with its FIOS link."""
+        user_id = get_integration_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "integration key required"})
+        conn = db.get_conn()
+        rows = conn.execute(
+            "SELECT id, name, external_ref, diagnostic_record, created_at FROM organizations WHERE user_id=? ORDER BY id", (user_id,)
+        ).fetchall()
+        conn.close()
+        out = []
+        for r in rows:
+            try:
+                rec = json.loads(r["diagnostic_record"] or "{}") or {}
+            except Exception:
+                rec = {}
+            co = rec.get("closeout") or {}
+            out.append({"orgId": r["id"], "name": r["name"], "externalRef": r["external_ref"] or "",
+                        "differs": rec.get("differs"), "reassessOn": co.get("reassessOn") or "", "createdAt": r["created_at"]})
+        return json_response(self, 200, {"organizations": out})
 
     def _set_diagnostic_record(self, org_id):
         """Body: {trigger, presentingProblem, verifiedConstraint, nextInLine,
@@ -493,6 +634,7 @@ class Handler(BaseHTTPRequestHandler):
         conn.execute("UPDATE organizations SET diagnostic_record=? WHERE id=?", (json.dumps(record), org_id))
         conn.commit()
         conn.close()
+        sync_to_fios(org_id)
         return json_response(self, 200, {"id": org_id, "record": record})
 
     def _hidden_problem_rate(self):
@@ -543,6 +685,7 @@ class Handler(BaseHTTPRequestHandler):
         )
         conn.commit()
         conn.close()
+        sync_to_fios(org_id)
         return json_response(self, 200, {"id": org_id, "nextSessionAt": when, "nextSessionNote": note, "documentsUrl": docs})
 
     def _ingest_990(self, org_id):
@@ -670,6 +813,7 @@ class Handler(BaseHTTPRequestHandler):
         )
         conn.commit()
         conn.close()
+        sync_to_fios(org_id)
         return json_response(self, 200, {"saved": scores, "evidence": evidence})
 
     def _get_dimensions(self, org_id):
@@ -1495,6 +1639,10 @@ class Handler(BaseHTTPRequestHandler):
                 portal["record"] = json.loads(org["diagnostic_record"] or "{}") if "diagnostic_record" in keys else {}
             except Exception:
                 portal["record"] = {}
+            try:
+                portal["selfScores"] = json.loads(org["self_scores"] or "{}") if "self_scores" in keys else {}
+            except Exception:
+                portal["selfScores"] = {}
 
         donor = {"hasData": False, "responseCount": 0, "averageScore": None}
         if rows:

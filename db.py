@@ -297,6 +297,12 @@ def init_db():
         # client's words, verified constraint, next in line, whether they
         # differed, and the closeout. Feeds the hidden-problem rate.
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS diagnostic_record TEXT DEFAULT '';"
+        # Link to the operations app (FIOS): external_ref is the FIOS
+        # pipeline deal id; self_scores is the client's own free-tool or
+        # scorecard result by dimension key (JSON), shown beside the
+        # verified scores.
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS external_ref TEXT;"
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS self_scores TEXT DEFAULT '';"
     )
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")

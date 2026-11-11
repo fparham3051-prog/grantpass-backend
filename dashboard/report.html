@@ -352,6 +352,27 @@ function recordHtml(p) {
   </section>`;
 }
 
+function selfVsHtml(p, r) {
+  const self = (p && p.selfScores) || {};
+  const dims = (r && r.dimensions) || [];
+  if (!Object.keys(self).length || !dims.length) return '';
+  const rows = dims.map((d) => {
+    const key = DIM_KEYS[d.name] === 'financial' ? 'revenue' : DIM_KEYS[d.name];
+    const sv = self[key];
+    if (typeof sv !== 'number') return '';
+    const gap = Math.round(sv - d.score);
+    return `<div class="dim"><div class="name">${esc(d.name)}<small>${Math.abs(gap) >= 20 ? 'Your view and the evidence differ' : 'Close to the evidence'}</small></div>
+      <div class="track" role="img" aria-label="${esc(d.name)}: you said ${sv}, evidence shows ${r0(d.score)}">
+        <div class="fill" style="width:${Math.max(2, Math.min(100, d.score))}%"></div>
+        <div class="tick" style="left:calc(${Math.min(100, sv)}% - 1px);background:var(--gold)"></div>
+      </div>
+      <div class="nums"><b>${r0(d.score)}</b><small>you said ${sv}</small></div></div>`;
+  }).join('');
+  if (!rows) return '';
+  return `<section class="card"><h2>Your view and the evidence</h2>
+    <p class="lead">The bar is the verified score; the gold mark is what your self-assessment said. The biggest gaps usually point to the real constraint.</p>${rows}</section>`;
+}
+
 function closeoutHtml(p) {
   const c = ((p && p.record) || {}).closeout || {};
   const rows = [['What changed', c.changes], ['Evidence created', c.evidence], ['Remaining risks', c.risks], ['Who owns it now', c.owner], ['Reassessment', c.reassessOn ? fmtDate(c.reassessOn) : ''], ['When to call us again', c.callAgain]]
@@ -389,7 +410,7 @@ async function load() {
     const d = await fetchReport(token, !!client);
     document.title = d.org.name + (client ? ' | Client Portal' : ' | InstitutionalOS Report');
     app.innerHTML = heroHtml(d) + '<main><div class="wrap">' + (client ? sessionHtml(d.portal) : '') +
-      constraintHtml(d.readiness || {}) + (client ? recordHtml(d.portal) : '') + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) + closeoutHtml(d.portal) : '') +
+      constraintHtml(d.readiness || {}) + (client ? recordHtml(d.portal) + selfVsHtml(d.portal, d.readiness) : '') + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) + closeoutHtml(d.portal) : '') +
       sealHtml((d.readiness || {}).candidSeal) + (client ? outcomesHtml(d.outcomes) : '') + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + (client ? nextHtml() : funderNoteHtml()) +
       '</div></main>';
   } catch (e) {

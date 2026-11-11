@@ -29,6 +29,8 @@
   .logo { font-weight:800; font-size:19px; color:#fff; }
   .logo span { color:var(--gold-light); }
   .api-row { display:flex; align-items:center; gap:8px; font-size:12.5px; color:#C7D0DC; }
+  .mini-table { width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:12px; }
+  .mini-table th, .mini-table td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
   .conn { position:relative; }
   .conn summary { list-style:none; cursor:pointer; color:#C7D0DC; font-size:12.5px; padding:6px 10px; border:1px solid rgba(255,255,255,.25); border-radius:8px; }
   .conn summary::-webkit-details-marker { display:none; }
@@ -139,7 +141,7 @@
         <summary title="Connection settings">Connection</summary>
         <div class="conn-panel">
           <label for="apiUrl">Scoring service address</label>
-          <input id="apiUrl" value="https://grantpass-backend-600997839134.us-central1.run.app">
+          <input id="apiUrl" value="https://grantpass-backend.onrender.com">
           <p>Only change this if Franklin asks you to.</p>
         </div>
       </details>
@@ -242,6 +244,8 @@
         
 <h3>Diagnostic Record</h3>
 <p class="hint">Write the presenting problem at intake, in the client's words, before scoring. Add the verified constraint, next in line, and closeout as the Diagnostic finishes. The client portal shows all of it; the hidden-problem rate above counts every record where "differed" is set.</p>
+<p class="hint" id="fiosLink"></p>
+<div id="selfVsVerified"></div>
 <div id="recordBlock">
   <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
     <div><label for="recTrigger">What brought them in</label>
@@ -539,6 +543,7 @@ function levelFromScore(s) { return s >= 75 ? 'green' : s >= 55 ? 'yellow' : 're
 function pillClass(level) { return level === 'green' ? 'green' : level === 'yellow' ? 'amber' : 'red'; }
 
 function renderScoreCard(data) {
+  try { renderSelfVsVerified(orgs.find(o => o.id === selectedOrgId), data.dimensions || []); } catch (e) { /* comparison is optional */ }
   const level = levelFromScore(data.overall);
   let html = '';
   if (data.stage) {
@@ -1349,6 +1354,24 @@ statusEl.textContent = e.message;
 // ---------- DIAGNOSTIC RECORD ----------
 function parseRecord(org) {
   try { return JSON.parse((org && org.diagnostic_record) || '{}') || {}; } catch (e) { return {}; }
+}
+const SITE_KEY_BY_NAME = { 'Strategy and Positioning': 'strategy', 'Program and Impact Evidence': 'program', 'Revenue and Financial Health': 'revenue', 'Leadership and Organizational Capacity': 'leadership', 'Operations and Infrastructure': 'operations', 'Partnerships and Ecosystem': 'partnerships', 'Governance and Risk': 'governance' };
+function renderSelfVsVerified(org, dims) {
+  const box = document.getElementById('selfVsVerified');
+  let self = {};
+  try { self = JSON.parse((org && org.self_scores) || '{}') || {}; } catch (e) { self = {}; }
+  const link = document.getElementById('fiosLink');
+  link.textContent = org && org.external_ref ? 'Linked to a FIOS pipeline deal. Saving here updates that deal and its Problem Log entry.' : 'Not linked to a FIOS deal yet. Moving the deal to the Diagnostic stage in FIOS links it.';
+  if (!Object.keys(self).length || !dims || !dims.length) { box.innerHTML = ''; return; }
+  const rows = dims.map(d => {
+    const key = SITE_KEY_BY_NAME[d.name];
+    const s = self[key];
+    if (typeof s !== 'number') return '';
+    const gap = Math.round(s - d.score);
+    const flag = gap >= 20 ? ' style="color:var(--red);font-weight:700;"' : '';
+    return `<tr><td>${d.name}</td><td>${s}</td><td>${Math.round(d.score)}</td><td${flag}>${gap > 0 ? '+' : ''}${gap}</td></tr>`;
+  }).join('');
+  box.innerHTML = rows ? `<p class="hint" style="margin-bottom:4px;"><strong>Self-assessment vs. verified.</strong> Gaps of 20 or more points (in red) are where the client's view and the evidence disagree; they often point to the hidden problem.</p><table class="mini-table"><thead><tr><th>Dimension</th><th>Self</th><th>Verified</th><th>Gap</th></tr></thead><tbody>${rows}</tbody></table>` : '';
 }
 function fillRecord(org) {
   const r = parseRecord(org), co = r.closeout || {};

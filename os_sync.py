@@ -42,6 +42,30 @@ def build_notes(row):
     return "\n".join(lines)
 
 
+DIM_KEYS = {
+    "Strategy and Positioning": "strategy", "Program and Impact Evidence": "program",
+    "Revenue and Financial Health": "revenue", "Leadership and Organizational Capacity": "leadership",
+    "Operations and Infrastructure": "operations", "Partnerships and Ecosystem": "partnerships",
+    "Governance and Risk": "governance",
+}
+
+
+def self_scores(row):
+    """{dimension key: score} from a scorecard row, using the website's
+    dimension keys (revenue, not financial), so FIOS and the console can
+    compare a client's self-assessment with the verified Diagnostic."""
+    try:
+        dims = json.loads(row.get("dimensions_json") or "[]")
+    except ValueError:
+        return {}
+    out = {}
+    for d in dims:
+        k = DIM_KEYS.get(d.get("name"))
+        if k and isinstance(d.get("score"), (int, float)):
+            out[k] = round(float(d["score"]))
+    return out
+
+
 def push_prospect(row, email):
     if not (OS_API_URL and OS_PROSPECTS_TOKEN):
         return False
@@ -53,6 +77,7 @@ def push_prospect(row, email):
         "link": "",
         "notes": f"Email: {email}\n" + build_notes(row),
         "sourceRef": f"scorecard-{row.get('id')}",
+        "selfScores": self_scores(row),
     }
     req = urllib.request.Request(
         OS_API_URL + "/api/admin/prospects",
@@ -108,3 +133,37 @@ def send_results_email(row, email, os_added, band=None, decision=None, continue_
     except Exception as exc:  # noqa: BLE001 - best effort by design
         print(f"os_sync.send_results_email failed: {exc}")
         return False
+
+
+# ---------- Diagnostic results back to FIOS ----------
+# When a client in the console is linked to a FIOS pipeline deal
+# (organizations.external_ref = the deal id), every save of its Diagnostic
+# record, portal details, or score pushes a summary to FIOS, which updates
+# the deal and its Problem Log entry. Needs OS_API_URL and OS_IOS_TOKEN (the
+# operations app's ios-scoped admin key). Runs in a background thread so a
+# cold FIOS never slows the console.
+OS_IOS_TOKEN = os.environ.get("OS_IOS_TOKEN") or ""
+
+
+def push_diagnostic(summary):
+    if not (OS_API_URL and OS_IOS_TOKEN and summary.get("externalRef")):
+        return False
+    import threading
+
+    def send():
+        req = urllib.request.Request(
+            OS_API_URL + "/api/admin/ios-sync",
+            data=json.dumps(summary).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Admin-Token": OS_IOS_TOKEN},
+            method="POST",
+        )
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(req, timeout=45) as res:
+                    res.read()
+                    return
+            except Exception as exc:  # noqa: BLE001 - best effort; the daily reconciliation catches misses
+                print(f"os_sync.push_diagnostic attempt {attempt + 1} failed: {exc}")
+
+    threading.Thread(target=send, daemon=True).start()
+    return True
