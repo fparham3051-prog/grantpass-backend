@@ -9,6 +9,7 @@ Run:
 
 See README.md for the full API reference and curl examples.
 """
+import datetime
 import json
 import urllib.parse
 import os
@@ -96,7 +97,127 @@ def org_summary(conn, org_id):
         "record": record,
         "nextSessionAt": org["next_session_at"] or "",
         "nextSessionNote": org["next_session_note"] or "",
+        "plan": _plan_for_fios(conn, org),
     }
+
+
+def _plan_for_fios(conn, org):
+    b = plan_bundle(conn, org)
+    st = dict(b["status"])
+    st["target"] = b["plan"].get("target", "")
+    st["baseline"] = b["plan"].get("baseline", "")
+    return st
+
+
+# ---------- 90-Day Improvement Plan (execute, review, standardize) ----------
+ACTION_STATUSES = ("not_started", "in_progress", "blocked", "done")
+REVIEW_KINDS = ("weekly", "monthly", "day90")
+SIGNS = ("yes", "mixed", "no", "")
+
+
+def _today():
+    return datetime.date.today().isoformat()
+
+
+def _add_days(iso, days):
+    try:
+        return (datetime.date.fromisoformat(iso[:10]) + datetime.timedelta(days=days)).isoformat()
+    except Exception:
+        return ""
+
+
+def _nice(iso):
+    try:
+        d = datetime.date.fromisoformat(iso[:10])
+        return d.strftime("%b ") + str(d.day) + ("" if d.year == datetime.date.today().year else d.strftime(", %Y"))
+    except Exception:
+        return iso
+
+
+def _json(text, fallback):
+    try:
+        v = json.loads(text or "")
+        return v if isinstance(v, type(fallback)) else fallback
+    except Exception:
+        return fallback
+
+
+def action_row(r):
+    return {"id": r["id"], "title": r["title"], "owner": r["owner"] or "", "dueDate": r["due_date"] or "",
+            "doneEvidence": r["done_evidence"] or "", "status": r["status"] or "not_started", "note": r["note"] or "",
+            "position": r["position"] or 0, "updatedBy": r["updated_by"] or "", "updatedAt": r["updated_at"],
+            "completedAt": r["completed_at"]}
+
+
+def review_row(r):
+    return {"id": r["id"], "kind": r["kind"], "reviewDate": r["review_date"], "completed": r["completed"] or "",
+            "blocked": r["blocked"] or "", "evidenceAdded": r["evidence_added"] or "",
+            "decisionNeeded": r["decision_needed"] or "", "nextSteps": r["next_steps"] or "",
+            "signsMoving": r["signs_moving"] or "", "diagnosisHolds": r["diagnosis_holds"],
+            "planChange": r["plan_change"] or "", "byWhom": r["by_whom"] or "", "createdAt": r["created_at"]}
+
+
+STANDARDIZE_KEYS = ("documented", "owner", "usedConsistently", "trained", "measured")
+
+
+def plan_bundle(conn, org):
+    """The plan header, its actions, recent reviews, and a computed status
+    with ONE next action. Used by the console, the client portal, and the
+    summary pushed to FIOS, so all three show the same thing."""
+    org_id = org["id"]
+    keys = org.keys()
+    plan = _json(org["improvement_plan"] if "improvement_plan" in keys else "", {})
+    record = _json(org["diagnostic_record"] if "diagnostic_record" in keys else "", {})
+    actions = [action_row(r) for r in conn.execute(
+        "SELECT * FROM plan_actions WHERE org_id=? ORDER BY position, id", (org_id,)).fetchall()]
+    reviews = [review_row(r) for r in conn.execute(
+        "SELECT * FROM plan_reviews WHERE org_id=? ORDER BY review_date DESC, id DESC LIMIT 40", (org_id,)).fetchall()]
+    today = _today()
+    start = plan.get("startDate") or ""
+    review90 = _add_days(start, 90) if start else ""
+    closeout = record.get("closeout") or {}
+    reassess = closeout.get("reassessOn") or (_add_days(start, 182) if start else "")
+    done = [a for a in actions if a["status"] == "done"]
+    blocked = [a for a in actions if a["status"] == "blocked"]
+    overdue = [a for a in actions if a["status"] != "done" and a["dueDate"] and a["dueDate"] < today]
+    last_review = reviews[0]["reviewDate"] if reviews else ""
+    day90_done = any(r["kind"] == "day90" for r in reviews)
+    active = bool(start) and plan.get("status", "active") != "closed"
+    # A weekly check-in is due once the plan is a week old and nothing has
+    # been logged in the last 7 days (any review kind counts).
+    since = last_review or start
+    weekly_due = bool(active and since and _add_days(since, 7) and _add_days(since, 7) <= today)
+    std = closeout.get("standardize") or {}
+    std_done = sum(1 for k in STANDARDIZE_KEYS if std.get(k) is True)
+
+    # One next action, in priority order.
+    if not start:
+        nxt = {"kind": "setup", "text": "Set the 90-day target and actions" if record.get("verifiedConstraint")
+               else "Complete the Diagnostic: confirm the binding constraint"}
+    elif blocked:
+        nxt = {"kind": "blocked", "text": "Unblock: " + blocked[0]["title"] + (" (" + blocked[0]["owner"] + ")" if blocked[0]["owner"] else "")}
+    elif review90 and review90 <= today and not day90_done:
+        nxt = {"kind": "day90", "text": "Hold the 90-day review"}
+    elif weekly_due:
+        nxt = {"kind": "weekly", "text": "Log this week's 15-minute check-in"}
+    else:
+        open_actions = sorted([a for a in actions if a["status"] != "done"], key=lambda a: (a["dueDate"] or "9999", a["position"]))
+        if open_actions:
+            a = open_actions[0]
+            nxt = {"kind": "action", "text": a["title"] + (" (" + a["owner"] + ")" if a["owner"] else "") + (", due " + _nice(a["dueDate"]) if a["dueDate"] else "")}
+        elif actions and std_done < len(STANDARDIZE_KEYS):
+            nxt = {"kind": "standardize", "text": "Confirm the change is now standard practice (closeout checklist)"}
+        elif reassess:
+            nxt = {"kind": "reassess", "text": "Six-month reassessment on " + _nice(reassess)}
+        else:
+            nxt = {"kind": "setup", "text": "Add the plan's actions"}
+    status = {
+        "active": active, "startDate": start, "review90On": review90, "review90Done": day90_done, "reassessOn": reassess,
+        "actionsTotal": len(actions), "actionsDone": len(done), "actionsBlocked": len(blocked), "actionsOverdue": len(overdue),
+        "lastReviewOn": last_review, "weeklyReviewDue": weekly_due,
+        "standardizeDone": std_done, "standardizeTotal": len(STANDARDIZE_KEYS), "nextAction": nxt,
+    }
+    return {"plan": plan, "actions": actions, "reviews": reviews, "status": status}
 
 
 def sync_to_fios(org_id):
@@ -294,6 +415,32 @@ class Handler(BaseHTTPRequestHandler):
             m = re.match(r"^/orgs/(\d+)/diagnostic-record$", path)
             if m and method == "POST":
                 return self._set_diagnostic_record(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/plan$", path)
+            if m and method == "GET":
+                return self._get_plan(int(m.group(1)))
+            if m and method == "POST":
+                return self._set_plan(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/plan/actions$", path)
+            if m and method == "POST":
+                return self._save_action(int(m.group(1)), None)
+            m = re.match(r"^/orgs/(\d+)/plan/actions/(\d+)$", path)
+            if m and method == "PUT":
+                return self._save_action(int(m.group(1)), int(m.group(2)))
+            if m and method == "DELETE":
+                return self._delete_plan_row(int(m.group(1)), "plan_actions", int(m.group(2)))
+            m = re.match(r"^/orgs/(\d+)/plan/reviews$", path)
+            if m and method == "POST":
+                return self._add_review(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/plan/reviews/(\d+)$", path)
+            if m and method == "DELETE":
+                return self._delete_plan_row(int(m.group(1)), "plan_reviews", int(m.group(2)))
+            m = re.match(r"^/public/portal/([A-Za-z0-9_-]+)/actions/(\d+)$", path)
+            if m and method == "POST":
+                return self._client_update_action(m.group(1), int(m.group(2)))
+            m = re.match(r"^/public/portal/([A-Za-z0-9_-]+)/checkin$", path)
+            if m and method == "POST":
+                return self._client_checkin(m.group(1))
 
             if path == "/integration/orgs" and method == "POST":
                 return self._integration_link_org()
@@ -594,7 +741,7 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 401, {"error": "integration key required"})
         conn = db.get_conn()
         rows = conn.execute(
-            "SELECT id, name, external_ref, diagnostic_record, created_at FROM organizations WHERE user_id=? ORDER BY id", (user_id,)
+            "SELECT id, name, external_ref, diagnostic_record, improvement_plan, created_at FROM organizations WHERE user_id=? ORDER BY id", (user_id,)
         ).fetchall()
         who = conn.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
         conn.close()
@@ -605,8 +752,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 rec = {}
             co = rec.get("closeout") or {}
+            plan = _json(r["improvement_plan"], {})
+            start = plan.get("startDate") or ""
             out.append({"orgId": r["id"], "name": r["name"], "externalRef": r["external_ref"] or "",
-                        "differs": rec.get("differs"), "reassessOn": co.get("reassessOn") or "", "createdAt": r["created_at"]})
+                        "differs": rec.get("differs"),
+                        "reassessOn": co.get("reassessOn") or (_add_days(start, 182) if start else ""),
+                        "review90On": _add_days(start, 90) if start else "", "createdAt": r["created_at"]})
         return json_response(self, 200, {"organizations": out, "actingAs": who["email"] if who else ""})
 
     def _set_diagnostic_record(self, org_id):
@@ -635,6 +786,12 @@ class Handler(BaseHTTPRequestHandler):
                 "owner": clip(co.get("owner"), 200),
                 "reassessOn": reassess,
                 "callAgain": clip(co.get("callAgain"), 1000),
+                # Is the change now how the organization works?
+                "standardize": {k: (co.get("standardize") or {}).get(k) is True for k in STANDARDIZE_KEYS},
+                # Results at four levels: what was done, what people can now
+                # do, what changed in the organization, what changed for the
+                # people it serves.
+                "results": {k: clip((co.get("results") or {}).get(k), 1000) for k in ("activity", "capability", "institutional", "mission")},
             },
         }
         conn = db.get_conn()
@@ -647,6 +804,198 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         sync_to_fios(org_id)
         return json_response(self, 200, {"id": org_id, "record": record})
+
+    # ---------- 90-Day Improvement Plan ----------
+    def _owned_org(self, conn, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return None, json_response(self, 401, {"error": "auth required"})
+        org = conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            return None, json_response(self, 404, {"error": "org not found"})
+        return org, None
+
+    def _plan_response(self, conn, org_id, status=200):
+        org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
+        bundle = plan_bundle(conn, org)
+        conn.close()
+        return json_response(self, status, bundle)
+
+    def _get_plan(self, org_id):
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        return self._plan_response(conn, org_id)
+
+    def _set_plan(self, org_id):
+        """Body: {target, baseline, dimension, startDate YYYY-MM-DD,
+        leadingSigns, reviewDay, status: active|closed}."""
+        data = self._read_json()
+        clip = lambda v, n: str(v or "").strip()[:n]
+        start = clip(data.get("startDate"), 10)
+        if start and not re.match(r"^\d{4}-\d{2}-\d{2}$", start):
+            return json_response(self, 400, {"error": "startDate must be YYYY-MM-DD"})
+        plan = {
+            "target": clip(data.get("target"), 1000),
+            "baseline": clip(data.get("baseline"), 1000),
+            "dimension": clip(data.get("dimension"), 80),
+            "startDate": start,
+            "leadingSigns": clip(data.get("leadingSigns"), 1000),
+            "reviewDay": clip(data.get("reviewDay"), 20),
+            "status": "closed" if data.get("status") == "closed" else "active",
+        }
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        conn.execute("UPDATE organizations SET improvement_plan=? WHERE id=?", (json.dumps(plan), org_id))
+        conn.commit()
+        sync_to_fios(org_id)
+        return self._plan_response(conn, org_id)
+
+    def _action_fields(self, data):
+        clip = lambda v, n: str(v or "").strip()[:n]
+        due = clip(data.get("dueDate"), 10)
+        if due and not re.match(r"^\d{4}-\d{2}-\d{2}$", due):
+            raise ValueError("dueDate must be YYYY-MM-DD")
+        status = data.get("status") if data.get("status") in ACTION_STATUSES else "not_started"
+        return {"title": clip(data.get("title"), 300), "owner": clip(data.get("owner"), 120), "due_date": due,
+                "done_evidence": clip(data.get("doneEvidence"), 600), "status": status, "note": clip(data.get("note"), 600),
+                "position": int(data.get("position") or 0)}
+
+    def _save_action(self, org_id, action_id):
+        data = self._read_json()
+        try:
+            f = self._action_fields(data)
+        except ValueError as e:
+            return json_response(self, 400, {"error": str(e)})
+        if not f["title"]:
+            return json_response(self, 400, {"error": "title required"})
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        now = db.now()
+        completed = now if f["status"] == "done" else None
+        if action_id is None:
+            conn.execute(
+                "INSERT INTO plan_actions (org_id, title, owner, due_date, done_evidence, status, note, position, updated_by, created_at, updated_at, completed_at) "
+                "VALUES (?,?,?,?,?,?,?,?,'consultant',?,?,?)",
+                (org_id, f["title"], f["owner"], f["due_date"], f["done_evidence"], f["status"], f["note"], f["position"], now, now, completed))
+        else:
+            prev = conn.execute("SELECT completed_at FROM plan_actions WHERE id=? AND org_id=?", (action_id, org_id)).fetchone()
+            if not prev:
+                conn.close()
+                return json_response(self, 404, {"error": "action not found"})
+            conn.execute(
+                "UPDATE plan_actions SET title=?, owner=?, due_date=?, done_evidence=?, status=?, note=?, position=?, updated_by='consultant', updated_at=?, completed_at=? WHERE id=?",
+                (f["title"], f["owner"], f["due_date"], f["done_evidence"], f["status"], f["note"], f["position"], now,
+                 (prev["completed_at"] or now) if f["status"] == "done" else None, action_id))
+        conn.commit()
+        sync_to_fios(org_id)
+        return self._plan_response(conn, org_id)
+
+    def _review_fields(self, data, by_whom):
+        clip = lambda v, n: str(v or "").strip()[:n]
+        when = clip(data.get("reviewDate"), 10) or _today()
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", when):
+            raise ValueError("reviewDate must be YYYY-MM-DD")
+        kind = data.get("kind") if data.get("kind") in REVIEW_KINDS else "weekly"
+        if by_whom == "client":
+            kind = "weekly"
+        holds = data.get("diagnosisHolds")
+        return (kind, when, clip(data.get("completed"), 1500), clip(data.get("blocked"), 1500), clip(data.get("evidenceAdded"), 1500),
+                clip(data.get("decisionNeeded"), 1000), clip(data.get("nextSteps"), 1500),
+                data.get("signsMoving") if data.get("signsMoving") in SIGNS else "",
+                holds if isinstance(holds, bool) else None, clip(data.get("planChange"), 1500), by_whom, db.now())
+
+    def _insert_review(self, conn, org_id, vals):
+        conn.execute(
+            "INSERT INTO plan_reviews (org_id, kind, review_date, completed, blocked, evidence_added, decision_needed, next_steps, signs_moving, diagnosis_holds, plan_change, by_whom, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (org_id,) + vals)
+
+    def _add_review(self, org_id):
+        data = self._read_json()
+        try:
+            vals = self._review_fields(data, "consultant")
+        except ValueError as e:
+            return json_response(self, 400, {"error": str(e)})
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        self._insert_review(conn, org_id, vals)
+        conn.commit()
+        sync_to_fios(org_id)
+        return self._plan_response(conn, org_id)
+
+    def _delete_plan_row(self, org_id, table, row_id):
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        conn.execute(f"DELETE FROM {table} WHERE id=? AND org_id=?", (row_id, org_id))
+        conn.commit()
+        sync_to_fios(org_id)
+        return self._plan_response(conn, org_id)
+
+    def _client_org(self, conn, token):
+        return conn.execute("SELECT * FROM organizations WHERE client_token=?", (token,)).fetchone()
+
+    def _client_update_action(self, token, action_id):
+        """From the client portal: change an action's status and add a note.
+        Clients can't rename, reassign, or delete actions."""
+        data = self._read_json()
+        status = data.get("status")
+        if status not in ACTION_STATUSES:
+            return json_response(self, 400, {"error": "status must be one of " + ", ".join(ACTION_STATUSES)})
+        note = str(data.get("note") or "").strip()[:600]
+        conn = db.get_conn()
+        org = self._client_org(conn, token)
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "not found"})
+        prev = conn.execute("SELECT completed_at, note FROM plan_actions WHERE id=? AND org_id=?", (action_id, org["id"])).fetchone()
+        if not prev:
+            conn.close()
+            return json_response(self, 404, {"error": "action not found"})
+        now = db.now()
+        conn.execute(
+            "UPDATE plan_actions SET status=?, note=?, updated_by='client', updated_at=?, completed_at=? WHERE id=?",
+            (status, note if "note" in data else (prev["note"] or ""), now,
+             (prev["completed_at"] or now) if status == "done" else None, action_id))
+        conn.commit()
+        sync_to_fios(org["id"])
+        bundle = plan_bundle(conn, org)
+        conn.close()
+        return json_response(self, 200, bundle)
+
+    def _client_checkin(self, token):
+        """From the client portal: the weekly 15-minute check-in."""
+        data = self._read_json()
+        try:
+            vals = self._review_fields(data, "client")
+        except ValueError as e:
+            return json_response(self, 400, {"error": str(e)})
+        if not any(vals[2:7]):
+            return json_response(self, 400, {"error": "add at least one answer"})
+        conn = db.get_conn()
+        org = self._client_org(conn, token)
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "not found"})
+        self._insert_review(conn, org["id"], vals)
+        conn.commit()
+        sync_to_fios(org["id"])
+        bundle = plan_bundle(conn, org)
+        conn.close()
+        return json_response(self, 201, bundle)
 
     def _hidden_problem_rate(self):
         """Across this consultant's organizations: how often the verified
@@ -1108,6 +1457,8 @@ class Handler(BaseHTTPRequestHandler):
                 "scoreHistory": [dict(r) for r in scores],
                 "reports": [dict(r) for r in reports],
                 "outcomes": [dict(r) for r in outcomes],
+                "planActions": [dict(r) for r in conn.execute("SELECT * FROM plan_actions WHERE org_id=? ORDER BY id", (org_id,)).fetchall()],
+                "planReviews": [dict(r) for r in conn.execute("SELECT * FROM plan_reviews WHERE org_id=? ORDER BY id", (org_id,)).fetchall()],
             })
         funders = conn.execute("SELECT * FROM funders WHERE user_id=?", (user_id,)).fetchall()
         export["funders"] = [dict(r) for r in funders]
@@ -1654,6 +2005,9 @@ class Handler(BaseHTTPRequestHandler):
                 portal["selfScores"] = json.loads(org["self_scores"] or "{}") if "self_scores" in keys else {}
             except Exception:
                 portal["selfScores"] = {}
+            conn3 = db.get_conn()
+            portal["improvement"] = plan_bundle(conn3, org)
+            conn3.close()
 
         donor = {"hasData": False, "responseCount": 0, "averageScore": None}
         if rows:

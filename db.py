@@ -194,6 +194,50 @@ CREATE TABLE IF NOT EXISTS demo_score_log (
 -- how far people get, which is the real product-market-fit signal the
 -- page had no way to produce before. demo_score_log_id optionally links a
 -- CTA click back to the specific completed score that led to it.
+-- The 90-Day Improvement Plan: the second half of the loop (execute,
+-- review, standardize). The plan header (target, baseline, start date,
+-- leading signs) lives on organizations.improvement_plan as JSON; the
+-- actions and the review log are rows here. Clients can update an action's
+-- status and log a weekly check-in from their portal, so updated_by / by_whom
+-- record which side wrote it.
+CREATE TABLE IF NOT EXISTS plan_actions (
+    id SERIAL PRIMARY KEY,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    title TEXT NOT NULL,
+    owner TEXT DEFAULT '',
+    due_date TEXT DEFAULT '',
+    done_evidence TEXT DEFAULT '',
+    status TEXT DEFAULT 'not_started',
+    note TEXT DEFAULT '',
+    position INTEGER DEFAULT 0,
+    updated_by TEXT DEFAULT 'consultant',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
+-- Weekly check-ins (15 minutes: done, blocked, evidence added, decision
+-- needed, next), monthly constraint reviews, and the 90-day review (did the
+-- actions happen, are the leading signs moving, does the diagnosis hold,
+-- should the plan change). The full evidence-based reassessment is at six
+-- months and is a rescoring, not a row here.
+CREATE TABLE IF NOT EXISTS plan_reviews (
+    id SERIAL PRIMARY KEY,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    kind TEXT NOT NULL DEFAULT 'weekly',
+    review_date TEXT NOT NULL,
+    completed TEXT DEFAULT '',
+    blocked TEXT DEFAULT '',
+    evidence_added TEXT DEFAULT '',
+    decision_needed TEXT DEFAULT '',
+    next_steps TEXT DEFAULT '',
+    signs_moving TEXT DEFAULT '',
+    diagnosis_holds BOOLEAN,
+    plan_change TEXT DEFAULT '',
+    by_whom TEXT DEFAULT 'consultant',
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS funnel_events (
     id SERIAL PRIMARY KEY,
     event TEXT NOT NULL,
@@ -303,6 +347,10 @@ def init_db():
         # verified scores.
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS external_ref TEXT;"
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS self_scores TEXT DEFAULT '';"
+        # 90-Day Improvement Plan header (JSON): target, baseline, dimension,
+        # startDate, leadingSigns, reviewDay. Actions and reviews are in
+        # plan_actions / plan_reviews.
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS improvement_plan TEXT DEFAULT '';"
     )
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")

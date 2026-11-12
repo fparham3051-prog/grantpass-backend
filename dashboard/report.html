@@ -90,6 +90,17 @@ main { padding: 28px 0 10px; }
 .pill.green { background: var(--green-bg); color: var(--green); }
 .pill.grey { background: #EDEFF2; color: var(--muted); }
 
+.next-action { border-left: 5px solid var(--gold); }
+.next-action .na-text { font-size: 18px; font-weight: 700; color: var(--navy); margin: 2px 0 6px; }
+.progress { height: 8px; background: #EDEFF2; border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
+.progress > span { display: block; height: 100%; background: var(--green); }
+.plan-act { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.plan-act.done .t { text-decoration: line-through; color: var(--muted); }
+.plan-act select { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.checkin label { display: block; font-weight: 600; font-size: 13px; color: var(--navy); margin: 10px 0 4px; }
+.checkin textarea { width: 100%; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; box-sizing: border-box; }
+.checkin .ok { color: var(--green); font-weight: 700; }
+.checkin .err { color: var(--red); }
 .next-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .next-grid > div { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .next-grid h3 { font-size: 17px; margin-bottom: 6px; }
@@ -160,6 +171,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const r0 = (n) => Math.round(Number(n) || 0);
 const fmtDate = (d) => new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+let API_BASE = '';
+let PORTAL_TOKEN = '';
 async function fetchReport(token, client) {
   const params = new URLSearchParams(location.search);
   const bases = [params.get('api'), PRIMARY_API, FALLBACK_API]
@@ -170,7 +183,7 @@ async function fetchReport(token, client) {
     try {
       const res = await fetch(base + (client ? '/public/portal/' : '/public/report/') + encodeURIComponent(token));
       const data = await res.json().catch(() => ({}));
-      if (res.ok) return data;
+      if (res.ok) { API_BASE = base; return data; }
       lastError = res.status === 404 ? 'This report link isn’t valid anymore. Ask Franklin for a fresh one.' : (data.error || lastError);
     } catch (e) { /* try the next address */ }
   }
@@ -339,6 +352,80 @@ function outcomesHtml(list) {
   return `<section class="card"><h2>Funding results</h2><p class="lead">Applications and decisions we've tracked together.</p>${rows}</section>`;
 }
 
+const ACT_LABELS = { not_started: 'Not started', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
+const REV_LABELS = { weekly: 'Weekly check-in', monthly: 'Monthly check', day90: '90-day review' };
+function nextActionHtml(p) {
+  const st = ((p && p.improvement) || {}).status;
+  if (!st || !st.nextAction) return '';
+  const pct = st.actionsTotal ? Math.round(100 * st.actionsDone / st.actionsTotal) : 0;
+  return `<section class="card next-action" id="nextAction">
+    <h3>Your next action</h3>
+    <p class="na-text">${esc(st.nextAction.text)}</p>
+    ${st.actionsTotal ? `<div class="progress" aria-hidden="true"><span style="width:${pct}%"></span></div><p class="muted" style="margin:0">${st.actionsDone} of ${st.actionsTotal} plan actions done${st.actionsBlocked ? ` &middot; ${st.actionsBlocked} blocked` : ''}${st.review90On ? ` &middot; 90-day review ${esc(fmtDate(st.review90On))}` : ''}${st.reassessOn ? ` &middot; reassessment ${esc(fmtDate(st.reassessOn))}` : ''}</p>` : ''}
+  </section>`;
+}
+function planHtml(p) {
+  const imp = (p && p.improvement) || {};
+  const plan = imp.plan || {}, acts = imp.actions || [], revs = imp.reviews || [];
+  if (!plan.target && !acts.length) return '';
+  const actRows = acts.map((a) => `<div class="plan-act ${a.status === 'done' ? 'done' : ''}" data-id="${a.id}">
+      <div><div class="t"><strong>${esc(a.title)}</strong></div>
+        <div class="muted">${[a.owner, a.dueDate ? 'due ' + fmtDate(a.dueDate) : ''].filter(Boolean).map(esc).join(' &middot; ')}</div>
+        ${a.doneEvidence ? `<div class="muted">Done when: ${esc(a.doneEvidence)}</div>` : ''}
+        ${a.note ? `<div class="muted">Note: ${esc(a.note)}</div>` : ''}</div>
+      <select class="act-status no-print" aria-label="Status of ${esc(a.title)}">${Object.keys(ACT_LABELS).map((k) => `<option value="${k}"${a.status === k ? ' selected' : ''}>${ACT_LABELS[k]}</option>`).join('')}</select>
+    </div>`).join('');
+  const recent = revs.slice(0, 4).map((r) => `<div class="item"><div><strong>${esc(REV_LABELS[r.kind] || r.kind)} &middot; ${esc(fmtDate(r.reviewDate))}</strong>
+      ${[['Done', r.completed], ['Blocked', r.blocked], ['Decision needed', r.decisionNeeded], ['Next', r.nextSteps]].filter((x) => x[1]).map((x) => `<div><span class="muted">${x[0]}:</span> ${esc(x[1])}</div>`).join('')}</div></div>`).join('');
+  return `<section class="card" id="plan">
+    <h2>Your 90-Day Improvement Plan</h2>
+    ${plan.target ? `<p class="lead"><strong>Target:</strong> ${esc(plan.target)}${plan.baseline ? `<br><strong>Today:</strong> ${esc(plan.baseline)}` : ''}${plan.leadingSigns ? `<br><strong>Early signs it's working:</strong> ${esc(plan.leadingSigns)}` : ''}</p>` : ''}
+    ${actRows || '<p class="muted">Actions will appear here once we agree on them.</p>'}
+    <p class="muted no-print" id="actMsg" style="min-height:1em"></p>
+    <div class="checkin no-print">
+      <h3 style="margin-top:14px">Weekly check-in (15 minutes)</h3>
+      <p class="muted" style="margin:0">Answer what applies. Franklin sees it right away.</p>
+      <label for="ciDone">What got done this week?</label><textarea id="ciDone" rows="2"></textarea>
+      <label for="ciBlocked">What's blocked?</label><textarea id="ciBlocked" rows="1"></textarea>
+      <label for="ciEvidence">Evidence added (a document, a decision, a number)</label><textarea id="ciEvidence" rows="1"></textarea>
+      <label for="ciDecision">What decision do you need?</label><textarea id="ciDecision" rows="1"></textarea>
+      <label for="ciNext">What happens before the next check-in?</label><textarea id="ciNext" rows="1"></textarea>
+      <div class="actions" style="margin-top:10px"><button class="btn btn-gold" type="button" id="ciSave">Save check-in</button> <span id="ciMsg"></span></div>
+    </div>
+    ${recent ? `<h3 style="margin-top:18px">Recent check-ins</h3>${recent}` : ''}
+  </section>`;
+}
+async function portalPost(path, body) {
+  const res = await fetch(API_BASE + '/public/portal/' + encodeURIComponent(PORTAL_TOKEN) + path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Could not save. Try again in a minute.');
+  return data;
+}
+function refreshPlan(bundle) {
+  const holder = { improvement: bundle };
+  const na = document.getElementById('nextAction'), pl = document.getElementById('plan');
+  if (na) na.outerHTML = nextActionHtml(holder);
+  if (pl) pl.outerHTML = planHtml(holder);
+}
+document.addEventListener('change', async (e) => {
+  if (!e.target.classList.contains('act-status')) return;
+  const row = e.target.closest('.plan-act'); const msg = document.getElementById('actMsg');
+  msg.textContent = 'Saving...';
+  try { refreshPlan(await portalPost('/actions/' + row.dataset.id, { status: e.target.value })); const m = document.getElementById('actMsg'); if (m) m.textContent = 'Saved.'; }
+  catch (err) { msg.textContent = err.message; }
+});
+document.addEventListener('click', async (e) => {
+  if (e.target.id !== 'ciSave') return;
+  const v = (id) => document.getElementById(id).value.trim();
+  const msg = document.getElementById('ciMsg');
+  const body = { completed: v('ciDone'), blocked: v('ciBlocked'), evidenceAdded: v('ciEvidence'), decisionNeeded: v('ciDecision'), nextSteps: v('ciNext') };
+  if (!Object.values(body).some(Boolean)) { msg.className = 'err'; msg.textContent = 'Add at least one answer.'; return; }
+  e.target.disabled = true; msg.className = ''; msg.textContent = 'Saving...';
+  try { refreshPlan(await portalPost('/checkin', body)); const m = document.getElementById('ciMsg'); if (m) { m.className = 'ok'; m.textContent = 'Check-in saved. Thank you.'; } }
+  catch (err) { msg.className = 'err'; msg.textContent = err.message; e.target.disabled = false; }
+});
+
 function recordHtml(p) {
   const r = (p && p.record) || {};
   if (!r.presentingProblem && !r.verifiedConstraint) return '';
@@ -375,11 +462,16 @@ function selfVsHtml(p, r) {
 
 function closeoutHtml(p) {
   const c = ((p && p.record) || {}).closeout || {};
-  const rows = [['What changed', c.changes], ['Evidence created', c.evidence], ['Remaining risks', c.risks], ['Who owns it now', c.owner], ['Reassessment', c.reassessOn ? fmtDate(c.reassessOn) : ''], ['When to call us again', c.callAgain]]
+  const res = c.results || {}, std = c.standardize || {};
+  const rows = [['What changed', c.changes], ['Evidence created', c.evidence], ['Remaining risks', c.risks], ['Who owns it now', c.owner], ['Reassessment', c.reassessOn ? fmtDate(c.reassessOn) : ''], ['When to call us again', c.callAgain],
+    ['What was done', res.activity], ['What people can now do', res.capability], ['What changed in the organization', res.institutional], ['What changed for the people you serve', res.mission]]
     .filter(([, v]) => v);
-  if (!rows.length) return '';
+  const stdItems = [['documented', 'Written down'], ['owner', 'Has a named owner'], ['usedConsistently', 'Used consistently'], ['trained', 'New staff trained in it'], ['measured', 'Performance measured']];
+  const stdAny = stdItems.some(([k]) => std[k] === true);
+  if (!rows.length && !stdAny) return '';
   return `<section class="card"><h2>Engagement closeout</h2>
-    ${rows.map(([k, v]) => `<div class="item"><div><strong>${esc(k)}</strong><div>${esc(v)}</div></div></div>`).join('')}</section>`;
+    ${rows.map(([k, v]) => `<div class="item"><div><strong>${esc(k)}</strong><div>${esc(v)}</div></div></div>`).join('')}
+    ${stdAny ? `<h3 style="margin-top:14px">Is it now standard practice?</h3>${stdItems.map(([k, l]) => `<div class="item"><div>${esc(l)}</div><span class="pill ${std[k] === true ? 'green' : 'grey'}">${std[k] === true ? 'Yes' : 'Not yet'}</span></div>`).join('')}` : ''}</section>`;
 }
 
 function funderNoteHtml() {
@@ -409,8 +501,9 @@ async function load() {
   try {
     const d = await fetchReport(token, !!client);
     document.title = d.org.name + (client ? ' | Client Portal' : ' | InstitutionalOS Report');
-    app.innerHTML = heroHtml(d) + '<main><div class="wrap">' + (client ? sessionHtml(d.portal) : '') +
-      constraintHtml(d.readiness || {}) + (client ? recordHtml(d.portal) + selfVsHtml(d.portal, d.readiness) : '') + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) + closeoutHtml(d.portal) : '') +
+    PORTAL_TOKEN = client || '';
+    app.innerHTML = heroHtml(d) + '<main><div class="wrap">' + (client ? nextActionHtml(d.portal) + sessionHtml(d.portal) : '') +
+      constraintHtml(d.readiness || {}) + (client ? recordHtml(d.portal) + planHtml(d.portal) + selfVsHtml(d.portal, d.readiness) : '') + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) + closeoutHtml(d.portal) : '') +
       sealHtml((d.readiness || {}).candidSeal) + (client ? outcomesHtml(d.outcomes) : '') + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + (client ? nextHtml() : funderNoteHtml()) +
       '</div></main>';
   } catch (e) {

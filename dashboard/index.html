@@ -29,6 +29,14 @@
   .logo { font-weight:800; font-size:19px; color:#fff; }
   .logo span { color:var(--gold-light); }
   .api-row { display:flex; align-items:center; gap:8px; font-size:12.5px; color:#C7D0DC; }
+  .plan-next { background:#fff; border:1px solid var(--line); border-left:4px solid var(--gold); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:13.5px; }
+  .plan-next strong { color:var(--navy); }
+  .std-checks { display:grid; gap:4px; font-size:13px; }
+  .std-checks label { display:flex; gap:8px; align-items:center; font-weight:400; margin:0; }
+  .act-row td select, .act-row td input { font-size:12.5px; padding:3px 6px; }
+  .act-status-done td:first-child { text-decoration:line-through; color:var(--ink-soft); }
+  .act-status-blocked td:first-child { color:var(--red); font-weight:700; }
+  .review-item { border-top:1px solid var(--line); padding:6px 0; font-size:12.5px; }
   .mini-table { width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:12px; }
   .mini-table th, .mini-table td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
   .conn { position:relative; }
@@ -276,9 +284,91 @@
       <div><label for="coReassess">Reassessment date</label><input type="date" id="coReassess"></div>
     </div>
     <label for="coCall">When to call us again</label><textarea id="coCall" rows="2"></textarea>
+    <p class="hint" style="margin-top:10px;"><strong>Is the change now standard practice?</strong> Tick each that is true; an improvement becomes institutional capacity only when it is.</p>
+    <div class="std-checks">
+      <label><input type="checkbox" id="stdDocumented"> The new process is written down</label>
+      <label><input type="checkbox" id="stdOwner"> It has a named owner</label>
+      <label><input type="checkbox" id="stdUsed"> It is used consistently, not just on paper</label>
+      <label><input type="checkbox" id="stdTrained"> New staff are trained in it</label>
+      <label><input type="checkbox" id="stdMeasured"> Its performance is measured</label>
+    </div>
+    <p class="hint" style="margin-top:10px;"><strong>Results, at four levels</strong></p>
+    <label for="resActivity">What was done (activity)</label><input type="text" id="resActivity" maxlength="1000" placeholder="Decision-rights matrix adopted">
+    <label for="resCapability">What people can now do (capability)</label><input type="text" id="resCapability" maxlength="1000" placeholder="Two managers approve spending up to $5,000">
+    <label for="resInstitutional">What changed in the organization</label><input type="text" id="resInstitutional" maxlength="1000" placeholder="ED approvals down from ~80% to ~35%">
+    <label for="resMission">What changed for the people you serve</label><input type="text" id="resMission" maxlength="1000" placeholder="Second site opened on schedule, no gap in services">
   </details>
   <button class="btn btn-primary btn-sm" id="saveRecordBtn">Save Diagnostic record</button>
   <div class="status-msg" id="recordStatus"></div>
+</div>
+
+<h3>90-Day Improvement Plan</h3>
+<p class="hint">The second half of the loop: execute, review, standardize. One target for the binding constraint, a short list of actions with owners and the evidence that shows each is done, a 15-minute weekly check-in, a monthly check, and a 90-day review. The full evidence-based reassessment comes at six months. The client sees all of it in their portal, can mark actions and log the weekly check-in there, and FIOS shows progress on the deal.</p>
+<div id="planBlock">
+  <div id="planNext" class="plan-next"></div>
+  <label for="planTarget">90-day target (the condition you want, in plain words)</label>
+  <textarea id="planTarget" rows="2" maxlength="1000" placeholder="Operating decisions are spread across three leaders, with clear escalation rules"></textarea>
+  <label for="planBaseline">Where it stands today (baseline)</label>
+  <input type="text" id="planBaseline" maxlength="1000" placeholder="The ED approves about 80% of operating decisions">
+  <div class="row" style="grid-template-columns:1fr 1fr 1fr; gap:10px;">
+    <div><label for="planDimension">Dimension</label>
+      <select id="planDimension">
+        <option value="">Choose</option>
+        <option value="strategy">Strategy and Positioning</option>
+        <option value="program">Program and Impact Evidence</option>
+        <option value="financial">Revenue and Financial Health</option>
+        <option value="leadership">Leadership and Organizational Capacity</option>
+        <option value="operations">Operations and Infrastructure</option>
+        <option value="partnerships">Partnerships and Ecosystem</option>
+        <option value="governance">Governance and Risk</option>
+      </select></div>
+    <div><label for="planStart">Plan start</label><input type="date" id="planStart"></div>
+    <div><label for="planReviewDay">Weekly check-in day</label>
+      <select id="planReviewDay"><option value="">Any</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select></div>
+  </div>
+  <label for="planSigns">Early signs it's working (leading signs, optional)</label>
+  <input type="text" id="planSigns" maxlength="1000" placeholder="Fewer approvals routed to the ED each week">
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+    <button class="btn btn-primary btn-sm" id="savePlanBtn">Save plan</button>
+    <label class="muted" style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="planClosed"> Plan closed</label>
+  </div>
+  <div class="status-msg" id="planStatus"></div>
+  <div id="planDates" class="muted" style="margin:6px 0 10px;"></div>
+
+  <h4 style="margin:14px 0 6px;">Actions</h4>
+  <div id="planActions"><p class="muted">No actions yet.</p></div>
+  <details id="addActionBox" style="margin:8px 0;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Add an action</summary>
+    <label for="actTitle">Action</label><input type="text" id="actTitle" maxlength="300" placeholder="Draft a decision-rights matrix">
+    <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
+      <div><label for="actOwner">Owner</label><input type="text" id="actOwner" maxlength="120" placeholder="Executive Director"></div>
+      <div><label for="actDue">Due</label><input type="date" id="actDue"></div>
+    </div>
+    <label for="actEvidence">Evidence that shows it's done</label><input type="text" id="actEvidence" maxlength="600" placeholder="Matrix approved by the board chair">
+    <button class="btn btn-ghost btn-sm" id="addActionBtn">Add action</button>
+  </details>
+
+  <h4 style="margin:14px 0 6px;">Reviews</h4>
+  <details id="addReviewBox" style="margin:8px 0;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Log a review</summary>
+    <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
+      <div><label for="revKind">Kind</label>
+        <select id="revKind"><option value="weekly">Weekly check-in (15 min)</option><option value="monthly">Monthly constraint check</option><option value="day90">90-day review</option></select></div>
+      <div><label for="revDate">Date</label><input type="date" id="revDate"></div>
+    </div>
+    <label for="revCompleted">What got done</label><textarea id="revCompleted" rows="2"></textarea>
+    <label for="revBlocked">What's blocked</label><textarea id="revBlocked" rows="1"></textarea>
+    <label for="revEvidence">Evidence added</label><input type="text" id="revEvidence">
+    <label for="revDecision">Decision needed</label><input type="text" id="revDecision">
+    <label for="revNext">Before the next check-in</label><textarea id="revNext" rows="1"></textarea>
+    <div id="revDeeper" hidden>
+      <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
+        <div><label for="revSigns">Are the early signs moving?</label><select id="revSigns"><option value="">Not judged</option><option value="yes">Yes</option><option value="mixed">Mixed</option><option value="no">No</option></select></div>
+        <div><label for="revHolds">Does the diagnosis still hold?</label><select id="revHolds"><option value="">Not judged</option><option value="yes">Yes</option><option value="no">No, revisit it</option></select></div>
+      </div>
+      <label for="revChange">Changes to the plan</label><textarea id="revChange" rows="2"></textarea>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="addReviewBtn">Save review</button>
+  </details>
+  <div id="planReviews"></div>
 </div>
 
 <h3>Client Portal</h3>
@@ -1082,6 +1172,7 @@ async function selectOrg(id) {
   document.getElementById('scoreResult').innerHTML = '';
 
   loadFullReport(id, org ? org.name : '');
+  loadPlan(id);
   loadScoreHistory(id);
   loadDimensions(id);
 
@@ -1379,6 +1470,10 @@ function fillRecord(org) {
   set('recTrigger', r.trigger); set('recPresenting', r.presentingProblem); set('recVerified', r.verifiedConstraint); set('recNext', r.nextInLine);
   set('recDiffers', r.differs === true ? 'yes' : r.differs === false ? 'no' : '');
   set('coChanges', co.changes); set('coEvidence', co.evidence); set('coRisks', co.risks); set('coOwner', co.owner); set('coReassess', co.reassessOn); set('coCall', co.callAgain);
+  const std = co.standardize || {}, res = co.results || {};
+  [['stdDocumented','documented'],['stdOwner','owner'],['stdUsed','usedConsistently'],['stdTrained','trained'],['stdMeasured','measured']]
+    .forEach(([id, k]) => { document.getElementById(id).checked = std[k] === true; });
+  set('resActivity', res.activity); set('resCapability', res.capability); set('resInstitutional', res.institutional); set('resMission', res.mission);
   document.getElementById('recordStatus').textContent = '';
 }
 async function loadHiddenRate() {
@@ -1394,11 +1489,14 @@ document.getElementById('saveRecordBtn').addEventListener('click', async () => {
   if (!selectedOrgId) return;
   const st = document.getElementById('recordStatus');
   const v = (id) => document.getElementById(id).value.trim();
+  const ck = (id) => document.getElementById(id).checked;
   const differs = v('recDiffers');
   const body = {
     trigger: v('recTrigger'), presentingProblem: v('recPresenting'), verifiedConstraint: v('recVerified'), nextInLine: v('recNext'),
     differs: differs === 'yes' ? true : differs === 'no' ? false : null,
-    closeout: { changes: v('coChanges'), evidence: v('coEvidence'), risks: v('coRisks'), owner: v('coOwner'), reassessOn: v('coReassess'), callAgain: v('coCall') },
+    closeout: { changes: v('coChanges'), evidence: v('coEvidence'), risks: v('coRisks'), owner: v('coOwner'), reassessOn: v('coReassess'), callAgain: v('coCall'),
+      standardize: { documented: ck('stdDocumented'), owner: ck('stdOwner'), usedConsistently: ck('stdUsed'), trained: ck('stdTrained'), measured: ck('stdMeasured') },
+      results: { activity: v('resActivity'), capability: v('resCapability'), institutional: v('resInstitutional'), mission: v('resMission') } },
   };
   st.className = 'status-msg'; st.textContent = 'Saving...';
   try {
@@ -1407,6 +1505,97 @@ document.getElementById('saveRecordBtn').addEventListener('click', async () => {
     if (org) org.diagnostic_record = JSON.stringify(data.record);
     st.className = 'status-msg ok'; st.textContent = 'Saved.';
     loadHiddenRate();
+    loadPlan(selectedOrgId);
+  } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
+});
+
+// ---------- 90-DAY IMPROVEMENT PLAN ----------
+const ACTION_STATUS_LABELS = { not_started: 'Not started', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
+const REVIEW_KIND_LABELS = { weekly: 'Weekly check-in', monthly: 'Monthly check', day90: '90-day review' };
+const escP = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtD = (iso) => { if (!iso) return ''; const d = new Date(iso.slice(0,10) + 'T12:00:00'); return isNaN(d) ? iso : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); };
+let planData = null;
+function renderPlan(d) {
+  planData = d;
+  const p = d.plan || {}, st = d.status || {};
+  const set = (id, v) => { document.getElementById(id).value = v || ''; };
+  set('planTarget', p.target); set('planBaseline', p.baseline); set('planDimension', p.dimension); set('planStart', p.startDate);
+  set('planReviewDay', p.reviewDay); set('planSigns', p.leadingSigns);
+  document.getElementById('planClosed').checked = p.status === 'closed';
+  const n = st.nextAction || {};
+  document.getElementById('planNext').innerHTML = `<strong>Next action:</strong> ${escP(n.text || '')}` +
+    (st.actionsTotal ? `<div class="muted" style="margin-top:4px;">${st.actionsDone} of ${st.actionsTotal} actions done` +
+      (st.actionsBlocked ? ` · <span style="color:var(--red);font-weight:700;">${st.actionsBlocked} blocked</span>` : '') +
+      (st.actionsOverdue ? ` · ${st.actionsOverdue} past due` : '') + (st.lastReviewOn ? ` · last check-in ${fmtD(st.lastReviewOn)}` : '') + '</div>' : '');
+  document.getElementById('planDates').textContent = st.startDate
+    ? `90-day review ${fmtD(st.review90On)}${st.review90Done ? ' (held)' : ''} · six-month reassessment ${fmtD(st.reassessOn)} · standard practice ${st.standardizeDone}/${st.standardizeTotal}`
+    : 'Set a start date to schedule the 90-day review and the six-month reassessment.';
+  const acts = d.actions || [];
+  document.getElementById('planActions').innerHTML = acts.length ? `<table class="mini-table"><thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>` +
+    acts.map(a => `<tr class="act-row act-status-${a.status}" data-id="${a.id}"><td>${escP(a.title)}${a.doneEvidence ? `<div class="muted">Done when: ${escP(a.doneEvidence)}</div>` : ''}${a.note ? `<div class="muted">Note${a.updatedBy === 'client' ? ' from client' : ''}: ${escP(a.note)}</div>` : ''}</td>` +
+      `<td>${escP(a.owner)}</td><td>${fmtD(a.dueDate)}</td><td><select class="act-status">${Object.keys(ACTION_STATUS_LABELS).map(k => `<option value="${k}"${a.status === k ? ' selected' : ''}>${ACTION_STATUS_LABELS[k]}</option>`).join('')}</select></td>` +
+      `<td><button class="btn-link act-del">Remove</button></td></tr>`).join('') + '</tbody></table>' : '<p class="muted">No actions yet. Keep it to 5–10, each with an owner and the evidence that shows it is done.</p>';
+  const revs = d.reviews || [];
+  document.getElementById('planReviews').innerHTML = revs.length ? revs.slice(0, 12).map(r => `<div class="review-item"><strong>${REVIEW_KIND_LABELS[r.kind] || r.kind}</strong> · ${fmtD(r.reviewDate)}${r.byWhom === 'client' ? ' · from the client' : ''} <button class="btn-link rev-del" data-id="${r.id}">Remove</button>` +
+    [['Done', r.completed], ['Blocked', r.blocked], ['Evidence added', r.evidenceAdded], ['Decision needed', r.decisionNeeded], ['Next', r.nextSteps], ['Plan changes', r.planChange]]
+      .filter(x => x[1]).map(x => `<div><span class="muted">${x[0]}:</span> ${escP(x[1])}</div>`).join('') +
+    (r.signsMoving ? `<div><span class="muted">Early signs moving:</span> ${escP(r.signsMoving)}</div>` : '') +
+    (r.diagnosisHolds === true ? '<div><span class="muted">Diagnosis holds:</span> yes</div>' : r.diagnosisHolds === false ? '<div><span class="muted">Diagnosis holds:</span> <strong>no, revisit</strong></div>' : '') + '</div>').join('')
+    : '<p class="muted">No reviews logged yet.</p>';
+}
+async function loadPlan(id) {
+  try { renderPlan(await api('GET', `/orgs/${id}/plan`)); }
+  catch (e) { document.getElementById('planNext').textContent = 'Could not load the plan: ' + e.message; }
+}
+document.getElementById('savePlanBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('planStatus'); const v = (id) => document.getElementById(id).value.trim();
+  st.className = 'status-msg'; st.textContent = 'Saving...';
+  try {
+    renderPlan(await api('POST', `/orgs/${selectedOrgId}/plan`, { target: v('planTarget'), baseline: v('planBaseline'), dimension: v('planDimension'),
+      startDate: v('planStart'), reviewDay: v('planReviewDay'), leadingSigns: v('planSigns'), status: document.getElementById('planClosed').checked ? 'closed' : 'active' }));
+    st.className = 'status-msg ok'; st.textContent = 'Saved.';
+  } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
+});
+document.getElementById('addActionBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('planStatus'); const v = (id) => document.getElementById(id).value.trim();
+  if (!v('actTitle')) { st.className = 'status-msg error'; st.textContent = 'Write the action first.'; return; }
+  try {
+    renderPlan(await api('POST', `/orgs/${selectedOrgId}/plan/actions`, { title: v('actTitle'), owner: v('actOwner'), dueDate: v('actDue'), doneEvidence: v('actEvidence'),
+      position: ((planData && planData.actions) || []).length + 1 }));
+    ['actTitle', 'actOwner', 'actDue', 'actEvidence'].forEach(id => document.getElementById(id).value = '');
+    st.className = 'status-msg ok'; st.textContent = 'Action added.';
+  } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
+});
+document.getElementById('planActions').addEventListener('change', async (e) => {
+  if (!e.target.classList.contains('act-status')) return;
+  const id = Number(e.target.closest('tr').dataset.id);
+  const a = ((planData && planData.actions) || []).find(x => x.id === id);
+  if (!a) return;
+  try { renderPlan(await api('PUT', `/orgs/${selectedOrgId}/plan/actions/${id}`, { ...a, status: e.target.value })); }
+  catch (err) { document.getElementById('planStatus').textContent = err.message; }
+});
+document.getElementById('planActions').addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('act-del') || !confirm('Remove this action?')) return;
+  const id = e.target.closest('tr').dataset.id;
+  try { renderPlan(await api('DELETE', `/orgs/${selectedOrgId}/plan/actions/${id}`)); } catch (err) { document.getElementById('planStatus').textContent = err.message; }
+});
+document.getElementById('planReviews').addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('rev-del') || !confirm('Remove this review?')) return;
+  try { renderPlan(await api('DELETE', `/orgs/${selectedOrgId}/plan/reviews/${e.target.dataset.id}`)); } catch (err) { document.getElementById('planStatus').textContent = err.message; }
+});
+document.getElementById('revKind').addEventListener('change', (e) => { document.getElementById('revDeeper').hidden = e.target.value === 'weekly'; });
+document.getElementById('addReviewBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('planStatus'); const v = (id) => document.getElementById(id).value.trim();
+  const holds = v('revHolds');
+  try {
+    renderPlan(await api('POST', `/orgs/${selectedOrgId}/plan/reviews`, { kind: v('revKind'), reviewDate: v('revDate'), completed: v('revCompleted'), blocked: v('revBlocked'),
+      evidenceAdded: v('revEvidence'), decisionNeeded: v('revDecision'), nextSteps: v('revNext'), signsMoving: v('revSigns'),
+      diagnosisHolds: holds === 'yes' ? true : holds === 'no' ? false : null, planChange: v('revChange') }));
+    ['revCompleted','revBlocked','revEvidence','revDecision','revNext','revChange','revDate'].forEach(id => document.getElementById(id).value = '');
+    st.className = 'status-msg ok'; st.textContent = 'Review saved.';
   } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
 });
 
