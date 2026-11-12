@@ -1534,7 +1534,7 @@ function renderPlan(d) {
   document.getElementById('planActions').innerHTML = acts.length ? `<table class="mini-table"><thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>` +
     acts.map(a => `<tr class="act-row act-status-${a.status}" data-id="${a.id}"><td>${escP(a.title)}${a.doneEvidence ? `<div class="muted">Done when: ${escP(a.doneEvidence)}</div>` : ''}${a.note ? `<div class="muted">Note${a.updatedBy === 'client' ? ' from client' : ''}: ${escP(a.note)}</div>` : ''}</td>` +
       `<td>${escP(a.owner)}</td><td>${fmtD(a.dueDate)}</td><td><select class="act-status">${Object.keys(ACTION_STATUS_LABELS).map(k => `<option value="${k}"${a.status === k ? ' selected' : ''}>${ACTION_STATUS_LABELS[k]}</option>`).join('')}</select></td>` +
-      `<td><button class="btn-link act-del">Remove</button></td></tr>`).join('') + '</tbody></table>' : '<p class="muted">No actions yet. Keep it to 5–10, each with an owner and the evidence that shows it is done.</p>';
+      `<td><button class="btn-link act-del">Remove</button></td></tr>`).join('') + '</tbody></table>' : '<p class="muted">No actions yet. Keep it to 3–6, each with an owner and the evidence that shows it is done.</p>';
   const revs = d.reviews || [];
   document.getElementById('planReviews').innerHTML = revs.length ? revs.slice(0, 12).map(r => `<div class="review-item"><strong>${REVIEW_KIND_LABELS[r.kind] || r.kind}</strong> · ${fmtD(r.reviewDate)}${r.byWhom === 'client' ? ' · from the client' : ''} <button class="btn-link rev-del" data-id="${r.id}">Remove</button>` +
     [['Done', r.completed], ['Blocked', r.blocked], ['Evidence added', r.evidenceAdded], ['Decision needed', r.decisionNeeded], ['Next', r.nextSteps], ['Plan changes', r.planChange]]
