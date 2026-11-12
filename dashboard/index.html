@@ -213,6 +213,10 @@
       <div class="panel" id="orgListPanel">
         <h2>Your Organizations</h2>
         <p class="hint" id="hiddenRate">Hidden-problem rate: no completed Diagnostic records yet.</p>
+        <details id="learningBox" style="margin:6px 0 10px;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">What worked, across clients</summary>
+          <p class="hint">How the 90-day plans ran and what moved, across every client. Use it to build the toolkits and the yearly summary. With only a few clients, read these as counts, not rates.</p>
+          <div id="learningResult"><p class="muted">Open to load.</p></div>
+        </details>
         <div id="orgList"><p class="muted">Loading...</p></div>
       </div>
 
@@ -254,6 +258,12 @@
 <p class="hint">Write the presenting problem at intake, in the client's words, before scoring. Add the verified constraint, next in line, and closeout as the Diagnostic finishes. The client portal shows all of it; the hidden-problem rate above counts every record where "differed" is set.</p>
 <p class="hint" id="fiosLink"></p>
 <div id="selfVsVerified"></div>
+<details id="surveyBox" style="margin:8px 0 14px;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Leader survey: several perspectives</summary>
+  <p class="hint">Send one private link to the executive director, board members, and senior staff. Each rates the organization on the same 21 practices as the free self-assessment (about 6 minutes). Their average, and how far apart they are, shows beside the verified score above. Wide spreads mean the leadership team sees the organization differently.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" id="getSurveyLinkBtn">Get survey link</button></div>
+  <div id="surveyLinkResult" style="margin-top:8px;"></div>
+  <div id="surveyResponses" class="muted" style="margin-top:6px;"></div>
+</details>
 <div id="recordBlock">
   <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
     <div><label for="recTrigger">What brought them in</label>
@@ -269,6 +279,15 @@
     <div><label for="recDiffers">Verified constraint vs. presenting problem</label>
       <select id="recDiffers"><option value="">Not known yet</option><option value="yes">Differed</option><option value="no">Matched</option></select></div>
   </div>
+  <details style="margin:8px 0;" open><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Context at intake</summary>
+    <div class="row" style="grid-template-columns:2fr 1fr; gap:10px;">
+      <div><label for="recDecision">The decision this Diagnostic serves</label><input type="text" id="recDecision" maxlength="500" placeholder="Apply for the $750K state workforce grant"></div>
+      <div><label for="recDecisionDate">Decision date</label><input type="date" id="recDecisionDate"></div>
+    </div>
+    <label for="recMission">Mission (one sentence)</label><input type="text" id="recMission" maxlength="600">
+    <label for="recServed">Who they serve</label><input type="text" id="recServed" maxlength="400" placeholder="Youth 14–24 in Prince George's County">
+    <label for="recResult">The result they want</label><input type="text" id="recResult" maxlength="600" placeholder="Win the grant without stretching the leadership team">
+  </details>
   <label for="recPresenting">Presenting problem (their words, at intake)</label>
   <textarea id="recPresenting" rows="2" maxlength="1000"></textarea>
   <label for="recVerified">Verified constraint</label>
@@ -351,7 +370,7 @@
   <details id="addReviewBox" style="margin:8px 0;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Log a review</summary>
     <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
       <div><label for="revKind">Kind</label>
-        <select id="revKind"><option value="weekly">Weekly check-in (15 min)</option><option value="monthly">Monthly constraint check</option><option value="day90">90-day review</option></select></div>
+        <select id="revKind"><option value="weekly">Weekly check-in (15 min)</option><option value="monthly">Monthly constraint check</option><option value="day90">90-day review</option><option value="month6">Six-month reassessment: did it stick?</option></select></div>
       <div><label for="revDate">Date</label><input type="date" id="revDate"></div>
     </div>
     <label for="revCompleted">What got done</label><textarea id="revCompleted" rows="2"></textarea>
@@ -366,6 +385,16 @@
       </div>
       <label for="revChange">Changes to the plan</label><textarea id="revChange" rows="2"></textarea>
     </div>
+    <div id="revHeld" hidden>
+      <p class="hint" style="margin:8px 0 4px;"><strong>Six months on, is each still true?</strong> Rescore the dimensions above too.</p>
+      <div class="std-checks">
+        <label><input type="checkbox" id="heldDocumented"> Still written down and current</label>
+        <label><input type="checkbox" id="heldOwner"> Still has a named owner</label>
+        <label><input type="checkbox" id="heldUsed"> Still used consistently</label>
+        <label><input type="checkbox" id="heldTrained"> New staff still trained in it</label>
+        <label><input type="checkbox" id="heldMeasured"> Still measured</label>
+      </div>
+    </div>
     <button class="btn btn-ghost btn-sm" id="addReviewBtn">Save review</button>
   </details>
   <div id="planReviews"></div>
@@ -378,6 +407,11 @@
     <div><label for="portalSessionAt">Next session</label><input type="datetime-local" id="portalSessionAt"></div>
     <div><label for="portalSessionNote">What it's for</label><input type="text" id="portalSessionNote" maxlength="300" placeholder="Readout of the Diagnostic"></div>
   </div>
+  <div class="row" style="grid-template-columns:1fr 1fr; gap:10px;">
+    <div><label for="portalContactName">Client contact</label><input type="text" id="portalContactName" maxlength="120" placeholder="Executive Director's name"></div>
+    <div><label for="portalContactEmail">Contact email (weekly check-in reminders)</label><input type="email" id="portalContactEmail" maxlength="200"></div>
+  </div>
+  <label class="muted" style="display:flex;gap:6px;align-items:center;font-weight:400;"><input type="checkbox" id="portalReminders" checked> Email a reminder when the weekly check-in is due</label>
   <label for="portalDocsUrl">Documents folder link (Google Drive, Dropbox, etc.)</label>
   <input type="url" id="portalDocsUrl" placeholder="https://drive.google.com/...">
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1166,6 +1200,10 @@ async function selectOrg(id) {
   document.getElementById('portalSessionAt').value = (org && org.next_session_at) || '';
   document.getElementById('portalSessionNote').value = (org && org.next_session_note) || '';
   document.getElementById('portalDocsUrl').value = (org && org.documents_url) || '';
+  document.getElementById('portalContactName').value = (org && org.client_contact_name) || '';
+  document.getElementById('portalContactEmail').value = (org && org.client_contact_email) || '';
+  document.getElementById('portalReminders').checked = !org || org.reminders_on !== false;
+  loadPerception(id);
   document.getElementById('portalStatus').textContent = '';
   document.getElementById('clientLinkResult').innerHTML = '';
   document.getElementById('orgStageStatus').textContent = '';
@@ -1447,27 +1485,64 @@ function parseRecord(org) {
   try { return JSON.parse((org && org.diagnostic_record) || '{}') || {}; } catch (e) { return {}; }
 }
 const SITE_KEY_BY_NAME = { 'Strategy and Positioning': 'strategy', 'Program and Impact Evidence': 'program', 'Revenue and Financial Health': 'revenue', 'Leadership and Organizational Capacity': 'leadership', 'Operations and Infrastructure': 'operations', 'Partnerships and Ecosystem': 'partnerships', 'Governance and Risk': 'governance' };
+let perceptionData = null, lastDims = [];
+async function loadPerception(id) {
+  perceptionData = null;
+  document.getElementById('surveyLinkResult').innerHTML = '';
+  try {
+    perceptionData = await api('GET', `/orgs/${id}/perception`);
+    if (perceptionData.surveyToken) document.getElementById('surveyLinkResult').innerHTML = linkBox(surveyUrl(perceptionData.surveyToken));
+  } catch (e) { /* optional */ }
+  renderSurveyResponses();
+  renderSelfVsVerified(orgs.find(o => o.id === selectedOrgId), lastDims);
+}
+function surveyUrl(t) { return location.origin + '/survey.html?s=' + t + '&api=' + encodeURIComponent(apiUrl()); }
+const ROLE_LABELS = { executive: 'Executive', board: 'Board', staff: 'Staff', other: 'Other' };
+function renderSurveyResponses() {
+  const el = document.getElementById('surveyResponses');
+  const p = perceptionData;
+  if (!p || !p.respondents) { el.textContent = 'No responses yet.'; return; }
+  el.innerHTML = `${p.respondents} response${p.respondents === 1 ? '' : 's'}: ` + Object.keys(p.byRole).map(k => `${p.byRole[k]} ${ROLE_LABELS[k] || k}`).join(', ') +
+    '<br>' + p.responses.map(r => `${escP(ROLE_LABELS[r.role] || r.role)}${r.name ? ' (' + escP(r.name) + ')' : ''} · ${fmtD(r.createdAt)} <button class="btn-link resp-del" data-id="${r.id}">Remove</button>`).join('<br>');
+}
+document.getElementById('getSurveyLinkBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  try { const d = await api('POST', `/orgs/${selectedOrgId}/survey-link`); document.getElementById('surveyLinkResult').innerHTML = linkBox(surveyUrl(d.token)); }
+  catch (e) { document.getElementById('surveyLinkResult').textContent = e.message; }
+});
+document.getElementById('surveyResponses').addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('resp-del') || !confirm('Remove this response?')) return;
+  try { const d = await api('DELETE', `/orgs/${selectedOrgId}/perception/${e.target.dataset.id}`); perceptionData = { ...d, surveyToken: perceptionData && perceptionData.surveyToken }; renderSurveyResponses(); renderSelfVsVerified(orgs.find(o => o.id === selectedOrgId), lastDims); }
+  catch (err) { alert(err.message); }
+});
 function renderSelfVsVerified(org, dims) {
+  lastDims = dims || [];
   const box = document.getElementById('selfVsVerified');
   let self = {};
   try { self = JSON.parse((org && org.self_scores) || '{}') || {}; } catch (e) { self = {}; }
   const link = document.getElementById('fiosLink');
   link.textContent = org && org.external_ref ? 'Linked to a FIOS pipeline deal. Saving here updates that deal and its Problem Log entry.' : 'Not linked to a FIOS deal yet. Moving the deal to the Diagnostic stage in FIOS links it.';
-  if (!Object.keys(self).length || !dims || !dims.length) { box.innerHTML = ''; return; }
+  const lead = (perceptionData && perceptionData.dimensions) || {};
+  const hasLead = Object.keys(lead).length > 0;
+  if ((!Object.keys(self).length && !hasLead) || !dims || !dims.length) { box.innerHTML = ''; return; }
+  const gapCell = (v, ver) => { if (typeof v !== 'number') return '<td class="muted">–</td>'; const g = Math.round(v - ver); return `<td${g >= 20 ? ' style="color:var(--red);font-weight:700;"' : ''}>${g > 0 ? '+' : ''}${g}</td>`; };
   const rows = dims.map(d => {
     const key = SITE_KEY_BY_NAME[d.name];
-    const s = self[key];
-    if (typeof s !== 'number') return '';
-    const gap = Math.round(s - d.score);
-    const flag = gap >= 20 ? ' style="color:var(--red);font-weight:700;"' : '';
-    return `<tr><td>${d.name}</td><td>${s}</td><td>${Math.round(d.score)}</td><td${flag}>${gap > 0 ? '+' : ''}${gap}</td></tr>`;
+    const s = self[key], L = lead[key];
+    if (typeof s !== 'number' && !L) return '';
+    const ver = Math.round(d.score);
+    const spread = L ? L.max - L.min : 0;
+    return `<tr><td>${d.name}</td><td>${typeof s === 'number' ? s : '–'}</td>` +
+      (hasLead ? `<td>${L ? L.avg + (L.n > 1 ? ` <span class="muted"${spread >= 40 ? ' style="color:var(--red);font-weight:700;"' : ''}>(${L.min}–${L.max})</span>` : '') : '–'}</td>` : '') +
+      `<td>${ver}</td>${gapCell(hasLead && L ? L.avg : s, ver)}</tr>`;
   }).join('');
-  box.innerHTML = rows ? `<p class="hint" style="margin-bottom:4px;"><strong>Self-assessment vs. verified.</strong> Gaps of 20 or more points (in red) are where the client's view and the evidence disagree; they often point to the hidden problem.</p><table class="mini-table"><thead><tr><th>Dimension</th><th>Self</th><th>Verified</th><th>Gap</th></tr></thead><tbody>${rows}</tbody></table>` : '';
+  box.innerHTML = rows ? `<p class="hint" style="margin-bottom:4px;"><strong>How leaders see it vs. the evidence.</strong> Gaps of 20 or more points (in red) are where their view and the evidence disagree; they often point to the hidden problem.${hasLead ? ' A leader range of 40+ points (red) means the leadership team disagrees with itself.' : ''}</p><table class="mini-table"><thead><tr><th>Dimension</th><th>Self-check</th>${hasLead ? `<th>Leaders (${perceptionData.respondents})</th>` : ''}<th>Verified</th><th>Gap</th></tr></thead><tbody>${rows}</tbody></table>` : '';
 }
 function fillRecord(org) {
   const r = parseRecord(org), co = r.closeout || {};
   const set = (id, v) => { document.getElementById(id).value = v || ''; };
   set('recTrigger', r.trigger); set('recPresenting', r.presentingProblem); set('recVerified', r.verifiedConstraint); set('recNext', r.nextInLine);
+  set('recDecision', r.decisionAtStake); set('recDecisionDate', r.decisionDate); set('recMission', r.mission); set('recServed', r.peopleServed); set('recResult', r.desiredResult);
   set('recDiffers', r.differs === true ? 'yes' : r.differs === false ? 'no' : '');
   set('coChanges', co.changes); set('coEvidence', co.evidence); set('coRisks', co.risks); set('coOwner', co.owner); set('coReassess', co.reassessOn); set('coCall', co.callAgain);
   const std = co.standardize || {}, res = co.results || {};
@@ -1493,6 +1568,7 @@ document.getElementById('saveRecordBtn').addEventListener('click', async () => {
   const differs = v('recDiffers');
   const body = {
     trigger: v('recTrigger'), presentingProblem: v('recPresenting'), verifiedConstraint: v('recVerified'), nextInLine: v('recNext'),
+    decisionAtStake: v('recDecision'), decisionDate: v('recDecisionDate'), mission: v('recMission'), peopleServed: v('recServed'), desiredResult: v('recResult'),
     differs: differs === 'yes' ? true : differs === 'no' ? false : null,
     closeout: { changes: v('coChanges'), evidence: v('coEvidence'), risks: v('coRisks'), owner: v('coOwner'), reassessOn: v('coReassess'), callAgain: v('coCall'),
       standardize: { documented: ck('stdDocumented'), owner: ck('stdOwner'), usedConsistently: ck('stdUsed'), trained: ck('stdTrained'), measured: ck('stdMeasured') },
@@ -1511,7 +1587,8 @@ document.getElementById('saveRecordBtn').addEventListener('click', async () => {
 
 // ---------- 90-DAY IMPROVEMENT PLAN ----------
 const ACTION_STATUS_LABELS = { not_started: 'Not started', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
-const REVIEW_KIND_LABELS = { weekly: 'Weekly check-in', monthly: 'Monthly check', day90: '90-day review' };
+const REVIEW_KIND_LABELS = { weekly: 'Weekly check-in', monthly: 'Monthly check', day90: '90-day review', month6: 'Six-month reassessment' };
+const HELD_LABELS = { documented: 'written down', owner: 'owned', usedConsistently: 'used', trained: 'taught', measured: 'measured' };
 const escP = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtD = (iso) => { if (!iso) return ''; const d = new Date(iso.slice(0,10) + 'T12:00:00'); return isNaN(d) ? iso : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); };
 let planData = null;
@@ -1540,6 +1617,7 @@ function renderPlan(d) {
     [['Done', r.completed], ['Blocked', r.blocked], ['Evidence added', r.evidenceAdded], ['Decision needed', r.decisionNeeded], ['Next', r.nextSteps], ['Plan changes', r.planChange]]
       .filter(x => x[1]).map(x => `<div><span class="muted">${x[0]}:</span> ${escP(x[1])}</div>`).join('') +
     (r.signsMoving ? `<div><span class="muted">Early signs moving:</span> ${escP(r.signsMoving)}</div>` : '') +
+    (r.held && Object.keys(r.held).length ? `<div><span class="muted">Held at six months:</span> ${Object.keys(r.held).map(k => (r.held[k] ? '✓ ' : '✗ ') + HELD_LABELS[k]).join(' · ')}</div>` : '') +
     (r.diagnosisHolds === true ? '<div><span class="muted">Diagnosis holds:</span> yes</div>' : r.diagnosisHolds === false ? '<div><span class="muted">Diagnosis holds:</span> <strong>no, revisit</strong></div>' : '') + '</div>').join('')
     : '<p class="muted">No reviews logged yet.</p>';
 }
@@ -1585,18 +1663,41 @@ document.getElementById('planReviews').addEventListener('click', async (e) => {
   if (!e.target.classList.contains('rev-del') || !confirm('Remove this review?')) return;
   try { renderPlan(await api('DELETE', `/orgs/${selectedOrgId}/plan/reviews/${e.target.dataset.id}`)); } catch (err) { document.getElementById('planStatus').textContent = err.message; }
 });
-document.getElementById('revKind').addEventListener('change', (e) => { document.getElementById('revDeeper').hidden = e.target.value === 'weekly'; });
+document.getElementById('revKind').addEventListener('change', (e) => { document.getElementById('revDeeper').hidden = e.target.value === 'weekly'; document.getElementById('revHeld').hidden = e.target.value !== 'month6'; });
 document.getElementById('addReviewBtn').addEventListener('click', async () => {
   if (!selectedOrgId) return;
   const st = document.getElementById('planStatus'); const v = (id) => document.getElementById(id).value.trim();
+  const ck = (id) => document.getElementById(id).checked;
   const holds = v('revHolds');
   try {
     renderPlan(await api('POST', `/orgs/${selectedOrgId}/plan/reviews`, { kind: v('revKind'), reviewDate: v('revDate'), completed: v('revCompleted'), blocked: v('revBlocked'),
       evidenceAdded: v('revEvidence'), decisionNeeded: v('revDecision'), nextSteps: v('revNext'), signsMoving: v('revSigns'),
-      diagnosisHolds: holds === 'yes' ? true : holds === 'no' ? false : null, planChange: v('revChange') }));
+      diagnosisHolds: holds === 'yes' ? true : holds === 'no' ? false : null, planChange: v('revChange'),
+      held: { documented: ck('heldDocumented'), owner: ck('heldOwner'), usedConsistently: ck('heldUsed'), trained: ck('heldTrained'), measured: ck('heldMeasured') } }));
     ['revCompleted','revBlocked','revEvidence','revDecision','revNext','revChange','revDate'].forEach(id => document.getElementById(id).value = '');
     st.className = 'status-msg ok'; st.textContent = 'Review saved.';
   } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
+});
+
+// ---------- WHAT WORKED, ACROSS CLIENTS ----------
+const DIM_LABELS = { strategy: 'Strategy', program: 'Program evidence', financial: 'Revenue', leadership: 'Leadership', operations: 'Operations', partnerships: 'Partnerships', governance: 'Governance' };
+document.getElementById('learningBox').addEventListener('toggle', async (e) => {
+  if (!e.target.open) return;
+  const el = document.getElementById('learningResult');
+  el.innerHTML = '<p class="muted">Loading...</p>';
+  try {
+    const d = await api('GET', '/orgs/learning-summary');
+    const t = d.totals;
+    const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '–';
+    const dimRows = Object.keys(d.byDimension).map(k => { const x = d.byDimension[k]; return `<tr><td>${DIM_LABELS[k] || k}</td><td>${x.plans}</td><td>${x.avgChange == null ? '–' : (x.avgChange > 0 ? '+' : '') + x.avgChange + ' pts (' + x.measured + ' measured)'}</td></tr>`; }).join('');
+    const sp = d.standardPractice, held = d.heldAtSixMonths;
+    el.innerHTML = `<p><strong>${d.plans.length}</strong> plan${d.plans.length === 1 ? '' : 's'} · <strong>${t.done}</strong> of ${t.actions} actions done (${pct(t.doneOnTime, t.done)} on time) · ${t.blocked} blocked now · check-ins logged: ${t.weekly} weekly, ${t.monthly} monthly, ${t.day90} 90-day, ${t.month6} six-month</p>` +
+      (dimRows ? `<table class="mini-table"><thead><tr><th>Constraint dimension</th><th>Plans</th><th>Average score change</th></tr></thead><tbody>${dimRows}</tbody></table>` : '') +
+      `<p class="muted">Standard practice at closeout (${sp.closeouts} closeouts): ${Object.keys(sp.counts).map(k => HELD_LABELS[k] + ' ' + sp.counts[k]).join(' · ')}</p>` +
+      `<p class="muted">Still true at six months: ${Object.keys(held).map(k => HELD_LABELS[k] + ' ' + held[k].held + '/' + held[k].checked).join(' · ')}</p>` +
+      (d.plans.length ? `<table class="mini-table"><thead><tr><th>Client</th><th>Constraint</th><th>Actions</th><th>Reviews</th><th>Score change</th></tr></thead><tbody>` +
+        d.plans.map(p => `<tr><td>${escP(p.name)}</td><td>${DIM_LABELS[p.dimension] || '–'}</td><td>${p.done}/${p.actions}</td><td>${p.reviews}</td><td>${p.scoreChange == null ? '–' : (p.scoreChange > 0 ? '+' : '') + p.scoreChange}</td></tr>`).join('') + '</tbody></table>' : '');
+  } catch (err) { el.textContent = 'Could not load: ' + err.message; }
 });
 
 // ---------- CLIENT PORTAL ----------
@@ -1614,10 +1715,14 @@ document.getElementById('savePortalBtn').addEventListener('click', async () => {
       nextSessionAt: document.getElementById('portalSessionAt').value,
       nextSessionNote: document.getElementById('portalSessionNote').value,
       documentsUrl: document.getElementById('portalDocsUrl').value.trim(),
+      clientContactName: document.getElementById('portalContactName').value.trim(),
+      clientContactEmail: document.getElementById('portalContactEmail').value.trim(),
+      remindersOn: document.getElementById('portalReminders').checked,
     };
     await api('POST', `/orgs/${selectedOrgId}/portal`, body);
     const org = orgs.find(o => o.id === selectedOrgId);
-    if (org) { org.next_session_at = body.nextSessionAt; org.next_session_note = body.nextSessionNote; org.documents_url = body.documentsUrl; }
+    if (org) { org.next_session_at = body.nextSessionAt; org.next_session_note = body.nextSessionNote; org.documents_url = body.documentsUrl;
+      org.client_contact_name = body.clientContactName; org.client_contact_email = body.clientContactEmail; org.reminders_on = body.remindersOn; }
     st.className = 'status-msg ok'; st.textContent = 'Saved. The client portal shows this now.';
   } catch (e) { st.className = 'status-msg error'; st.textContent = e.message; }
 });

@@ -238,6 +238,20 @@ CREATE TABLE IF NOT EXISTS plan_reviews (
     created_at TEXT NOT NULL
 );
 
+-- Several perspectives: leaders (ED, board, staff) rate the organization on
+-- the same 21 practices as the free self-assessment, through a private
+-- survey link. Answers are 1-5 on the evidence rubric; dim_scores is the
+-- 0-100 average per dimension key. Shown beside the verified scores.
+CREATE TABLE IF NOT EXISTS perception_responses (
+    id SERIAL PRIMARY KEY,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    role TEXT DEFAULT '',
+    name TEXT DEFAULT '',
+    answers TEXT NOT NULL,
+    dim_scores TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS funnel_events (
     id SERIAL PRIMARY KEY,
     event TEXT NOT NULL,
@@ -351,6 +365,15 @@ def init_db():
         # startDate, leadingSigns, reviewDay. Actions and reviews are in
         # plan_actions / plan_reviews.
         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS improvement_plan TEXT DEFAULT '';"
+        # Several perspectives: the private survey link for leaders.
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS survey_token TEXT;"
+        # Weekly check-in reminders go to this person.
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS client_contact_name TEXT DEFAULT '';"
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS client_contact_email TEXT DEFAULT '';"
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS reminders_on BOOLEAN DEFAULT TRUE;"
+        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS last_reminded_at TEXT DEFAULT '';"
+        # The six-month review records which standard-practice items held.
+        "ALTER TABLE plan_reviews ADD COLUMN IF NOT EXISTS held TEXT DEFAULT '';"
     )
     conn.executescript("ALTER TABLE readiness_scores ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'FUND';")
     conn.executescript("ALTER TABLE manual_dimensions ADD COLUMN IF NOT EXISTS evidence_json TEXT DEFAULT '{}';")

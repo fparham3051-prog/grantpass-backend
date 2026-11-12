@@ -70,6 +70,12 @@ def get_integration_user(handler):
 
 
 DIM_TO_SITE_KEY = {"financial": "revenue"}  # console key -> website key
+DIM_KEY_BY_NAME = {  # dimension name -> console key (the plan's "dimension")
+    "Strategy and Positioning": "strategy", "Program and Impact Evidence": "program",
+    "Revenue and Financial Health": "financial", "Leadership and Organizational Capacity": "leadership",
+    "Operations and Infrastructure": "operations", "Partnerships and Ecosystem": "partnerships",
+    "Governance and Risk": "governance",
+}
 
 
 def org_summary(conn, org_id):
@@ -98,6 +104,7 @@ def org_summary(conn, org_id):
         "nextSessionAt": org["next_session_at"] or "",
         "nextSessionNote": org["next_session_note"] or "",
         "plan": _plan_for_fios(conn, org),
+        "perception": {k: v for k, v in perception_summary(conn, org_id).items() if k in ("respondents", "byRole", "dimensions")},
     }
 
 
@@ -109,9 +116,36 @@ def _plan_for_fios(conn, org):
     return st
 
 
+# ---------- Several perspectives: the leader survey ----------
+# The same 21 practices as the website's free self-assessment (3 per
+# dimension), so a leader's rating and a visitor's self-score mean the same
+# thing. Answers 1-5: Not in place, Talked about, Informal, Documented,
+# Verified -> 0/25/50/75/100.
+SURVEY_ITEMS = [{"id": "p1q1", "dim": "strategy", "text": "Our organization has a clear, written strategic plan that guides major decisions."}, {"id": "p1q2", "dim": "strategy", "text": "Leadership regularly reviews organizational risks and has a plan to address them."}, {"id": "p1q3", "dim": "strategy", "text": "We have a defined sustainability roadmap for the next 1-3 years."}, {"id": "p2q1", "dim": "revenue", "text": "We track how much of our budget depends on any single funder, and act before one source grows too large a share."}, {"id": "p2q2", "dim": "revenue", "text": "We have active strategies for grants, corporate partnerships, and earned or contracted revenue."}, {"id": "p2q3", "dim": "revenue", "text": "We track and forecast our revenue pipeline at least quarterly."}, {"id": "p3q1", "dim": "leadership", "text": "Roles and performance expectations are clearly defined across the organization."}, {"id": "p3q2", "dim": "leadership", "text": "Leadership has a plan for developing staff and building bench strength."}, {"id": "p3q3", "dim": "leadership", "text": "The board and executive team agree on strategic priorities in writing and revisit them together at least once a year."}, {"id": "p4q1", "dim": "operations", "text": "We use consistent systems (CRM, project management, etc.) to track our work and data."}, {"id": "p4q2", "dim": "operations", "text": "We have KPIs or dashboards that leadership reviews regularly."}, {"id": "p4q3", "dim": "operations", "text": "Our operational workflows are documented well enough that a new hire could follow them."}, {"id": "p5q1", "dim": "partnerships", "text": "We maintain active partnerships across sectors (education, workforce, government, corporate, community) and know what each one contributes."}, {"id": "p5q2", "dim": "partnerships", "text": "We have a deliberate strategy for building and stewarding partnerships, not just ad hoc relationships."}, {"id": "p5q3", "dim": "partnerships", "text": "Our key partnerships are formalized (MOUs or agreements) where appropriate."}, {"id": "p6q1", "dim": "program", "text": "Each major program has a written logic model or theory of change linking its activities to the outcomes we expect."}, {"id": "p6q2", "dim": "program", "text": "We regularly collect outcome data (changes in participants\u2019 lives), not just outputs such as people served or sessions held."}, {"id": "p6q3", "dim": "program", "text": "We use our results to improve or change programs, and could show a funder an example of when we did."}, {"id": "p7q1", "dim": "governance", "text": "Our board has adopted the core policies Form 990 asks about: conflict of interest, whistleblower, and document retention."}, {"id": "p7q2", "dim": "governance", "text": "The full board receives our Form 990 before it\u2019s filed and reviews our annual financial statements or audit."}, {"id": "p7q3", "dim": "governance", "text": "The board formally evaluates the executive director at least once a year."}]
+SURVEY_ROLES = ("executive", "board", "staff", "other")
+SITE_DIM_KEYS = ("strategy", "program", "revenue", "leadership", "operations", "partnerships", "governance")
+
+
+def perception_summary(conn, org_id):
+    rows = conn.execute("SELECT id, role, name, dim_scores, created_at FROM perception_responses WHERE org_id=? ORDER BY id", (org_id,)).fetchall()
+    out = {"respondents": len(rows), "byRole": {}, "dimensions": {}, "responses": []}
+    per = {k: [] for k in SITE_DIM_KEYS}
+    for r in rows:
+        out["byRole"][r["role"] or "other"] = out["byRole"].get(r["role"] or "other", 0) + 1
+        ds = _json(r["dim_scores"], {})
+        for k in SITE_DIM_KEYS:
+            if isinstance(ds.get(k), (int, float)):
+                per[k].append(ds[k])
+        out["responses"].append({"id": r["id"], "role": r["role"], "name": r["name"], "createdAt": r["created_at"]})
+    for k, vals in per.items():
+        if vals:
+            out["dimensions"][k] = {"avg": round(sum(vals) / len(vals)), "min": round(min(vals)), "max": round(max(vals)), "n": len(vals)}
+    return out
+
+
 # ---------- 90-Day Improvement Plan (execute, review, standardize) ----------
 ACTION_STATUSES = ("not_started", "in_progress", "blocked", "done")
-REVIEW_KINDS = ("weekly", "monthly", "day90")
+REVIEW_KINDS = ("weekly", "monthly", "day90", "month6")
 SIGNS = ("yes", "mixed", "no", "")
 
 
@@ -154,7 +188,8 @@ def review_row(r):
             "blocked": r["blocked"] or "", "evidenceAdded": r["evidence_added"] or "",
             "decisionNeeded": r["decision_needed"] or "", "nextSteps": r["next_steps"] or "",
             "signsMoving": r["signs_moving"] or "", "diagnosisHolds": r["diagnosis_holds"],
-            "planChange": r["plan_change"] or "", "byWhom": r["by_whom"] or "", "createdAt": r["created_at"]}
+            "planChange": r["plan_change"] or "", "byWhom": r["by_whom"] or "", "createdAt": r["created_at"],
+            "held": _json(r["held"] if "held" in r.keys() else "", {})}
 
 
 STANDARDIZE_KEYS = ("documented", "owner", "usedConsistently", "trained", "measured")
@@ -182,11 +217,12 @@ def plan_bundle(conn, org):
     overdue = [a for a in actions if a["status"] != "done" and a["dueDate"] and a["dueDate"] < today]
     last_review = reviews[0]["reviewDate"] if reviews else ""
     day90_done = any(r["kind"] == "day90" for r in reviews)
+    month6_done = any(r["kind"] == "month6" for r in reviews)
     active = bool(start) and plan.get("status", "active") != "closed"
     # A weekly check-in is due once the plan is a week old and nothing has
     # been logged in the last 7 days (any review kind counts).
     since = last_review or start
-    weekly_due = bool(active and since and _add_days(since, 7) and _add_days(since, 7) <= today)
+    weekly_due = bool(active and not day90_done and since and _add_days(since, 7) and _add_days(since, 7) <= today)
     std = closeout.get("standardize") or {}
     std_done = sum(1 for k in STANDARDIZE_KEYS if std.get(k) is True)
 
@@ -198,6 +234,8 @@ def plan_bundle(conn, org):
         nxt = {"kind": "blocked", "text": "Unblock: " + blocked[0]["title"] + (" (" + blocked[0]["owner"] + ")" if blocked[0]["owner"] else "")}
     elif review90 and review90 <= today and not day90_done:
         nxt = {"kind": "day90", "text": "Hold the 90-day review"}
+    elif reassess and reassess <= today and not month6_done and day90_done:
+        nxt = {"kind": "month6", "text": "Hold the six-month reassessment: rescore, and check the changes held"}
     elif weekly_due:
         nxt = {"kind": "weekly", "text": "Log this week's 15-minute check-in"}
     else:
@@ -214,10 +252,31 @@ def plan_bundle(conn, org):
     status = {
         "active": active, "startDate": start, "review90On": review90, "review90Done": day90_done, "reassessOn": reassess,
         "actionsTotal": len(actions), "actionsDone": len(done), "actionsBlocked": len(blocked), "actionsOverdue": len(overdue),
-        "lastReviewOn": last_review, "weeklyReviewDue": weekly_due,
+        "lastReviewOn": last_review, "weeklyReviewDue": weekly_due, "reassessDone": month6_done,
         "standardizeDone": std_done, "standardizeTotal": len(STANDARDIZE_KEYS), "nextAction": nxt,
     }
     return {"plan": plan, "actions": actions, "reviews": reviews, "status": status}
+
+
+def _insert_snapshot(conn, org_id, data):
+    conn.execute(
+        """INSERT INTO financial_snapshots
+        (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
+         net_assets, contributions_revenue, program_revenue,
+         conflict_of_interest_policy, whistleblower_policy, document_retention_policy,
+         form_990_provided_to_board, governing_body_voting_members, independent_voting_members,
+         ingested_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            org_id, data.get("source", "bulk"), data.get("fiscal_year"), data.get("total_revenue"),
+            data.get("total_expenses"), data.get("total_assets"), data.get("net_assets"),
+            data.get("contributions_revenue"), data.get("program_revenue"),
+            data.get("conflict_of_interest_policy"), data.get("whistleblower_policy"),
+            data.get("document_retention_policy"), data.get("form_990_provided_to_board"),
+            data.get("governing_body_voting_members"), data.get("independent_voting_members"),
+            db.now(),
+        ),
+    )
 
 
 def sync_to_fios(org_id):
@@ -438,6 +497,30 @@ class Handler(BaseHTTPRequestHandler):
             m = re.match(r"^/public/portal/([A-Za-z0-9_-]+)/actions/(\d+)$", path)
             if m and method == "POST":
                 return self._client_update_action(m.group(1), int(m.group(2)))
+            m = re.match(r"^/orgs/(\d+)/survey-link$", path)
+            if m and method == "POST":
+                return self._survey_link(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/perception$", path)
+            if m and method == "GET":
+                return self._get_perception(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/perception/(\d+)$", path)
+            if m and method == "DELETE":
+                return self._delete_perception(int(m.group(1)), int(m.group(2)))
+            m = re.match(r"^/public/survey/([A-Za-z0-9_-]+)$", path)
+            if m and method == "GET":
+                return self._get_survey(m.group(1))
+            if m and method == "POST":
+                return self._submit_survey(m.group(1))
+            if path == "/orgs/learning-summary" and method == "GET":
+                return self._learning_summary()
+            if path == "/integration/checkins-due" and method == "GET":
+                return self._integration_checkins_due()
+            m = re.match(r"^/integration/orgs/(\d+)/reminded$", path)
+            if m and method == "POST":
+                return self._integration_reminded(int(m.group(1)))
+            m = re.match(r"^/integration/orgs/(\d+)/financials$", path)
+            if m and method == "POST":
+                return self._integration_financials(int(m.group(1)))
             m = re.match(r"^/public/portal/([A-Za-z0-9_-]+)/checkin$", path)
             if m and method == "POST":
                 return self._client_checkin(m.group(1))
@@ -615,7 +698,7 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 401, {"error": "auth required"})
         conn = db.get_conn()
         rows = conn.execute(
-            "SELECT id, name, ein, description, stage, candid_seal, next_session_at, next_session_note, documents_url, diagnostic_record, external_ref, self_scores, created_at FROM organizations WHERE user_id=?", (user_id,)
+            "SELECT id, name, ein, description, stage, candid_seal, next_session_at, next_session_note, documents_url, diagnostic_record, external_ref, self_scores, client_contact_name, client_contact_email, reminders_on, created_at FROM organizations WHERE user_id=?", (user_id,)
         ).fetchall()
         conn.close()
         return json_response(self, 200, {"organizations": [dict(r) for r in rows]})
@@ -700,6 +783,15 @@ class Handler(BaseHTTPRequestHandler):
                 self_scores[k] = max(0, min(100, round(float(v))))
         conn = db.get_conn()
         org = conn.execute("SELECT * FROM organizations WHERE external_ref=? AND user_id=?", (ref, user_id)).fetchone()
+        adopt = str(data.get("adoptRef") or "").strip()[:80]
+        if not org and adopt:
+            # A market-scan demo for the same organization becomes the client
+            # record, so its public data and any work on it carry over.
+            prev = conn.execute("SELECT * FROM organizations WHERE external_ref=? AND user_id=?", (adopt, user_id)).fetchone()
+            if prev:
+                conn.execute("UPDATE organizations SET external_ref=? WHERE id=?", (ref, prev["id"]))
+                org = conn.execute("SELECT * FROM organizations WHERE id=?", (prev["id"],)).fetchone()
+        ein = re.sub(r"[^0-9]", "", str(data.get("ein") or ""))[:9]
         created = False
         if not org:
             cur = conn.execute(
@@ -720,6 +812,8 @@ class Handler(BaseHTTPRequestHandler):
         if not record.get("presentingProblem") and data.get("presentingProblem"):
             record["presentingProblem"] = str(data["presentingProblem"]).strip()[:1000]
         updates = {"diagnostic_record": json.dumps(record)}
+        if ein and not (org["ein"] or ""):
+            updates["ein"] = ein
         if self_scores and not (org["self_scores"] or ""):
             updates["self_scores"] = json.dumps(self_scores)
         token = org["client_token"]
@@ -778,6 +872,12 @@ class Handler(BaseHTTPRequestHandler):
             "presentingProblem": clip(data.get("presentingProblem"), 1000),
             "verifiedConstraint": clip(data.get("verifiedConstraint"), 1000),
             "nextInLine": clip(data.get("nextInLine"), 500),
+            # Context at intake: the decision this Diagnostic serves.
+            "decisionAtStake": clip(data.get("decisionAtStake"), 500),
+            "decisionDate": clip(data.get("decisionDate"), 10) if re.match(r"^\d{4}-\d{2}-\d{2}$", str(data.get("decisionDate") or "")) else "",
+            "mission": clip(data.get("mission"), 600),
+            "peopleServed": clip(data.get("peopleServed"), 400),
+            "desiredResult": clip(data.get("desiredResult"), 600),
             "differs": data.get("differs") if isinstance(data.get("differs"), bool) else None,
             "closeout": {
                 "changes": clip(co.get("changes"), 2000),
@@ -908,6 +1008,8 @@ class Handler(BaseHTTPRequestHandler):
         if by_whom == "client":
             kind = "weekly"
         holds = data.get("diagnosisHolds")
+        held_in = data.get("held") if isinstance(data.get("held"), dict) else {}
+        self._held = json.dumps({k: held_in.get(k) for k in STANDARDIZE_KEYS if isinstance(held_in.get(k), bool)}) if kind == "month6" else ""
         return (kind, when, clip(data.get("completed"), 1500), clip(data.get("blocked"), 1500), clip(data.get("evidenceAdded"), 1500),
                 clip(data.get("decisionNeeded"), 1000), clip(data.get("nextSteps"), 1500),
                 data.get("signsMoving") if data.get("signsMoving") in SIGNS else "",
@@ -915,8 +1017,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _insert_review(self, conn, org_id, vals):
         conn.execute(
-            "INSERT INTO plan_reviews (org_id, kind, review_date, completed, blocked, evidence_added, decision_needed, next_steps, signs_moving, diagnosis_holds, plan_change, by_whom, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (org_id,) + vals)
+            "INSERT INTO plan_reviews (org_id, kind, review_date, completed, blocked, evidence_added, decision_needed, next_steps, signs_moving, diagnosis_holds, plan_change, by_whom, created_at, held) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (org_id,) + vals + (getattr(self, "_held", "") or "",))
 
     def _add_review(self, org_id):
         data = self._read_json()
@@ -997,6 +1099,216 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         return json_response(self, 201, bundle)
 
+    # ---------- several perspectives ----------
+    def _survey_link(self, org_id):
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        token = org["survey_token"] or secrets.token_urlsafe(18)
+        if not org["survey_token"]:
+            conn.execute("UPDATE organizations SET survey_token=? WHERE id=?", (token, org_id))
+            conn.commit()
+        conn.close()
+        return json_response(self, 200, {"token": token})
+
+    def _get_perception(self, org_id):
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        out = perception_summary(conn, org_id)
+        out["surveyToken"] = org["survey_token"] or ""
+        conn.close()
+        return json_response(self, 200, out)
+
+    def _delete_perception(self, org_id, rid):
+        conn = db.get_conn()
+        org, err = self._owned_org(conn, org_id)
+        if err:
+            conn.close()
+            return err
+        conn.execute("DELETE FROM perception_responses WHERE id=? AND org_id=?", (rid, org_id))
+        conn.commit()
+        out = perception_summary(conn, org_id)
+        conn.close()
+        sync_to_fios(org_id)
+        return json_response(self, 200, out)
+
+    def _get_survey(self, token):
+        conn = db.get_conn()
+        org = conn.execute("SELECT id, name FROM organizations WHERE survey_token=?", (token,)).fetchone()
+        conn.close()
+        if not org:
+            return json_response(self, 404, {"error": "not found"})
+        return json_response(self, 200, {"orgName": org["name"], "items": SURVEY_ITEMS, "roles": list(SURVEY_ROLES)})
+
+    def _submit_survey(self, token):
+        data = self._read_json()
+        answers_in = data.get("answers") if isinstance(data.get("answers"), dict) else {}
+        answers = {}
+        for it in SURVEY_ITEMS:
+            v = answers_in.get(it["id"])
+            if isinstance(v, int) and 1 <= v <= 5:
+                answers[it["id"]] = v
+        if len(answers) < 14:
+            return json_response(self, 400, {"error": "please answer at least two questions in each area"})
+        dims = {}
+        for k in SITE_DIM_KEYS:
+            vals = [(answers[it["id"]] - 1) * 25 for it in SURVEY_ITEMS if it["dim"] == k and it["id"] in answers]
+            if vals:
+                dims[k] = round(sum(vals) / len(vals))
+        role = data.get("role") if data.get("role") in SURVEY_ROLES else "other"
+        name = str(data.get("name") or "").strip()[:120]
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE survey_token=?", (token,)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "not found"})
+        conn.execute("INSERT INTO perception_responses (org_id, role, name, answers, dim_scores, created_at) VALUES (?,?,?,?,?,?)",
+                     (org["id"], role, name, json.dumps(answers), json.dumps(dims), db.now()))
+        conn.commit()
+        conn.close()
+        sync_to_fios(org["id"])
+        return json_response(self, 201, {"ok": True})
+
+    # ---------- what worked, across clients ----------
+    def _learning_summary(self):
+        """Across this consultant's clients: how plans ran and what moved.
+        The raw material for the toolkits and the yearly 'what worked'
+        summary; small numbers are shown as counts, not rates."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        orgs = conn.execute("SELECT * FROM organizations WHERE user_id=?", (user_id,)).fetchall()
+        plans = []
+        totals = {"actions": 0, "done": 0, "doneOnTime": 0, "blocked": 0, "weekly": 0, "monthly": 0, "day90": 0, "month6": 0}
+        std = {k: 0 for k in STANDARDIZE_KEYS}
+        held = {k: [0, 0] for k in STANDARDIZE_KEYS}
+        by_dim = {}
+        known = differed = closeouts = 0
+        for org in orgs:
+            b = plan_bundle(conn, org)
+            plan = b["plan"]
+            rec = _json(org["diagnostic_record"], {})
+            if isinstance(rec.get("differs"), bool):
+                known += 1
+                differed += 1 if rec["differs"] else 0
+            co = rec.get("closeout") or {}
+            s = co.get("standardize") or {}
+            if any(s.get(k) is True for k in STANDARDIZE_KEYS):
+                closeouts += 1
+                for k in STANDARDIZE_KEYS:
+                    std[k] += 1 if s.get(k) is True else 0
+            if not plan.get("startDate"):
+                continue
+            acts = b["actions"]
+            totals["actions"] += len(acts)
+            for a in acts:
+                if a["status"] == "done":
+                    totals["done"] += 1
+                    if a["dueDate"] and a["completedAt"] and a["completedAt"][:10] <= a["dueDate"]:
+                        totals["doneOnTime"] += 1
+                if a["status"] == "blocked":
+                    totals["blocked"] += 1
+            for r in b["reviews"]:
+                totals[r["kind"]] = totals.get(r["kind"], 0) + 1
+                if r["kind"] == "month6":
+                    for k, v in (r.get("held") or {}).items():
+                        if k in held and isinstance(v, bool):
+                            held[k][1] += 1
+                            held[k][0] += 1 if v else 0
+            # score movement on the plan's dimension, first saved score vs latest
+            dim = plan.get("dimension") or ""
+            hist = conn.execute("SELECT dimensions_json, computed_at FROM readiness_scores WHERE org_id=? ORDER BY computed_at", (org["id"],)).fetchall()
+            def dscore(row):
+                d = _json(row["dimensions_json"], []) if row else []
+                if isinstance(d, dict):
+                    d = d.get("dimensions") or []
+                for x in d if isinstance(d, list) else []:
+                    if isinstance(x, dict) and (x.get("key") == dim or DIM_KEY_BY_NAME.get(x.get("name")) == dim):
+                        return x.get("score")
+                return None
+            first = dscore(hist[0]) if hist else None
+            last = dscore(hist[-1]) if len(hist) > 1 else None
+            change = round(last - first, 1) if isinstance(first, (int, float)) and isinstance(last, (int, float)) else None
+            if dim:
+                d = by_dim.setdefault(dim, {"plans": 0, "changes": []})
+                d["plans"] += 1
+                if change is not None:
+                    d["changes"].append(change)
+            plans.append({"orgId": org["id"], "name": org["name"], "dimension": dim, "target": plan.get("target", ""),
+                          "actions": len(acts), "done": sum(1 for a in acts if a["status"] == "done"),
+                          "reviews": len(b["reviews"]), "scoreChange": change, "status": b["status"]["nextAction"]})
+        conn.close()
+        dims_out = {k: {"plans": v["plans"], "measured": len(v["changes"]),
+                        "avgChange": round(sum(v["changes"]) / len(v["changes"]), 1) if v["changes"] else None} for k, v in by_dim.items()}
+        return json_response(self, 200, {
+            "plans": plans, "totals": totals, "byDimension": dims_out,
+            "standardPractice": {"closeouts": closeouts, "counts": std},
+            "heldAtSixMonths": {k: {"held": v[0], "checked": v[1]} for k, v in held.items()},
+            "hiddenProblem": {"known": known, "differed": differed},
+        })
+
+    # ---------- reminders and demo data, for the other systems ----------
+    def _integration_checkins_due(self):
+        """For the website backend's daily reminder run: clients whose weekly
+        check-in is due, who have a contact email and reminders on, and who
+        haven't been reminded in the last 6 days."""
+        user_id = get_integration_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "integration key required"})
+        conn = db.get_conn()
+        orgs = conn.execute("SELECT * FROM organizations WHERE user_id=? AND client_contact_email <> '' AND reminders_on IS NOT FALSE AND client_token IS NOT NULL", (user_id,)).fetchall()
+        cutoff = _add_days(_today(), -6)
+        out = []
+        for org in orgs:
+            if org["last_reminded_at"] and org["last_reminded_at"][:10] > cutoff:
+                continue
+            b = plan_bundle(conn, org)
+            st = b["status"]
+            if not st["weeklyReviewDue"]:
+                continue
+            day = (b["plan"].get("reviewDay") or "").strip()
+            if day and datetime.date.today().strftime("%A") != day and org["last_reminded_at"]:
+                continue  # wait for their check-in day, except for a first reminder
+            out.append({"orgId": org["id"], "name": org["name"], "contactName": org["client_contact_name"] or "",
+                        "email": org["client_contact_email"], "clientToken": org["client_token"],
+                        "nextAction": st["nextAction"]["text"], "lastReviewOn": st["lastReviewOn"],
+                        "actionsDone": st["actionsDone"], "actionsTotal": st["actionsTotal"], "target": b["plan"].get("target", "")})
+        conn.close()
+        return json_response(self, 200, {"due": out})
+
+    def _integration_reminded(self, org_id):
+        user_id = get_integration_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "integration key required"})
+        conn = db.get_conn()
+        conn.execute("UPDATE organizations SET last_reminded_at=? WHERE id=? AND user_id=?", (db.now(), org_id, user_id))
+        conn.commit()
+        conn.close()
+        return json_response(self, 200, {"ok": True})
+
+    def _integration_financials(self, org_id):
+        """Load public Form 990 figures for a client (or a market-scan demo)
+        from FIOS, same fields as /ingest-financial-data."""
+        user_id = get_integration_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "integration key required"})
+        data = self._read_json()
+        conn = db.get_conn()
+        if not conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone():
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        _insert_snapshot(conn, org_id, data)
+        conn.commit()
+        conn.close()
+        sync_to_fios(org_id)
+        return json_response(self, 200, {"ok": True})
+
     def _hidden_problem_rate(self):
         """Across this consultant's organizations: how often the verified
         constraint differed from the presenting problem, among records
@@ -1032,6 +1344,11 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, 400, {"error": "nextSessionAt must be YYYY-MM-DD or YYYY-MM-DDTHH:MM"})
         note = (data.get("nextSessionNote") or "").strip()[:300]
         docs = (data.get("documentsUrl") or "").strip()[:500]
+        contact_name = (data.get("clientContactName") or "").strip()[:120]
+        contact_email = (data.get("clientContactEmail") or "").strip()[:200]
+        if contact_email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", contact_email):
+            return json_response(self, 400, {"error": "client contact email is not valid"})
+        reminders_on = data.get("remindersOn") is not False
         if docs and not docs.lower().startswith("https://"):
             return json_response(self, 400, {"error": "documentsUrl must start with https://"})
         conn = db.get_conn()
@@ -1040,13 +1357,14 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
             return json_response(self, 404, {"error": "org not found"})
         conn.execute(
-            "UPDATE organizations SET next_session_at=?, next_session_note=?, documents_url=? WHERE id=?",
-            (when, note, docs, org_id),
+            "UPDATE organizations SET next_session_at=?, next_session_note=?, documents_url=?, client_contact_name=?, client_contact_email=?, reminders_on=? WHERE id=?",
+            (when, note, docs, contact_name, contact_email, reminders_on, org_id),
         )
         conn.commit()
         conn.close()
         sync_to_fios(org_id)
-        return json_response(self, 200, {"id": org_id, "nextSessionAt": when, "nextSessionNote": note, "documentsUrl": docs})
+        return json_response(self, 200, {"id": org_id, "nextSessionAt": when, "nextSessionNote": note, "documentsUrl": docs,
+                                         "clientContactName": contact_name, "clientContactEmail": contact_email, "remindersOn": reminders_on})
 
     def _ingest_990(self, org_id):
         user_id = get_auth_user(self)
@@ -1119,24 +1437,7 @@ class Handler(BaseHTTPRequestHandler):
         if not org:
             conn.close()
             return json_response(self, 404, {"error": "org not found"})
-        conn.execute(
-            """INSERT INTO financial_snapshots
-            (org_id, source, fiscal_year, total_revenue, total_expenses, total_assets,
-             net_assets, contributions_revenue, program_revenue,
-             conflict_of_interest_policy, whistleblower_policy, document_retention_policy,
-             form_990_provided_to_board, governing_body_voting_members, independent_voting_members,
-             ingested_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                org_id, data.get("source", "bulk"), data.get("fiscal_year"), data.get("total_revenue"),
-                data.get("total_expenses"), data.get("total_assets"), data.get("net_assets"),
-                data.get("contributions_revenue"), data.get("program_revenue"),
-                data.get("conflict_of_interest_policy"), data.get("whistleblower_policy"),
-                data.get("document_retention_policy"), data.get("form_990_provided_to_board"),
-                data.get("governing_body_voting_members"), data.get("independent_voting_members"),
-                db.now(),
-            ),
-        )
+        _insert_snapshot(conn, org_id, data)
         conn.commit()
         conn.close()
         return json_response(self, 200, {"saved": data})
@@ -2007,6 +2308,8 @@ class Handler(BaseHTTPRequestHandler):
                 portal["selfScores"] = {}
             conn3 = db.get_conn()
             portal["improvement"] = plan_bundle(conn3, org)
+            pv = perception_summary(conn3, org_id)
+            portal["perception"] = {k: pv[k] for k in ("respondents", "byRole", "dimensions")}
             conn3.close()
 
         donor = {"hasData": False, "responseCount": 0, "averageScore": None}

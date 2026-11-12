@@ -90,6 +90,18 @@ main { padding: 28px 0 10px; }
 .pill.green { background: var(--green-bg); color: var(--green); }
 .pill.grey { background: #EDEFF2; color: var(--muted); }
 
+.tabs { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid var(--line); }
+.tabs .wrap { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); background: none; border: none; border-bottom: 3px solid transparent; padding: 12px 14px; cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--gold); }
+.tabs button:focus-visible { outline: 2px solid var(--gold-access); outline-offset: -2px; }
+.tab-panel[hidden] { display: none; }
+@media print { .tabs { display: none; } .tab-panel[hidden] { display: block !important; } }
+.context dl { display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+.context dt { font-weight: 600; color: var(--navy); }
+.context dd { margin: 0; }
+@media (max-width: 560px) { .context dl { grid-template-columns: 1fr; gap: 0; } .context dd { margin-bottom: 8px; } }
+.export { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
 .next-action { border-left: 5px solid var(--gold); }
 .next-action .na-text { font-size: 18px; font-weight: 700; color: var(--navy); margin: 2px 0 6px; }
 .progress { height: 8px; background: #EDEFF2; border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
@@ -353,7 +365,7 @@ function outcomesHtml(list) {
 }
 
 const ACT_LABELS = { not_started: 'Not started', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
-const REV_LABELS = { weekly: 'Weekly check-in', monthly: 'Monthly check', day90: '90-day review' };
+const REV_LABELS = { weekly: 'Weekly check-in', monthly: 'Monthly check', day90: '90-day review', month6: 'Six-month reassessment' };
 function nextActionHtml(p) {
   const st = ((p && p.improvement) || {}).status;
   if (!st || !st.nextAction) return '';
@@ -361,13 +373,55 @@ function nextActionHtml(p) {
   return `<section class="card next-action" id="nextAction">
     <h3>Your next action</h3>
     <p class="na-text">${esc(st.nextAction.text)}</p>
+    ${st.startDate ? '<p class="no-print" style="margin:0 0 6px"><a href="#plan">Open your 90-day plan &rarr;</a></p>' : ''}
     ${st.actionsTotal ? `<div class="progress" aria-hidden="true"><span style="width:${pct}%"></span></div><p class="muted" style="margin:0">${st.actionsDone} of ${st.actionsTotal} plan actions done${st.actionsBlocked ? ` &middot; ${st.actionsBlocked} blocked` : ''}${st.review90On ? ` &middot; 90-day review ${esc(fmtDate(st.review90On))}` : ''}${st.reassessOn ? ` &middot; reassessment ${esc(fmtDate(st.reassessOn))}` : ''}</p>` : ''}
   </section>`;
 }
+function contextHtml(p) {
+  const r = (p && p.record) || {};
+  const rows = [['The decision ahead', r.decisionAtStake ? r.decisionAtStake + (r.decisionDate ? ' (by ' + fmtDate(r.decisionDate) + ')' : '') : ''],
+    ['The result you want', r.desiredResult], ['Who you serve', r.peopleServed], ['Your mission', r.mission]].filter(x => x[1]);
+  if (!rows.length) return '';
+  return `<section class="card context"><h2>Why we're doing this</h2><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></section>`;
+}
+let PLAN_CACHE = null, ORG_NAME = '';
+function downloadFile(name, type, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function icsEscape(t) { return String(t || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
+function planIcs() {
+  const imp = PLAN_CACHE || {}, st = imp.status || {};
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const ev = [];
+  const day = (iso, summary, desc, uid) => {
+    const d = iso.slice(0, 10).replace(/-/g, '');
+    const next = new Date(iso.slice(0, 10) + 'T12:00:00Z'); next.setUTCDate(next.getUTCDate() + 1);
+    ev.push(['BEGIN:VEVENT', 'UID:' + uid + '@franklyinspired.associates', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + d,
+      'DTEND;VALUE=DATE:' + next.toISOString().slice(0, 10).replace(/-/g, ''), 'SUMMARY:' + icsEscape(summary), 'DESCRIPTION:' + icsEscape(desc), 'END:VEVENT'].join('\r\n'));
+  };
+  (imp.actions || []).forEach(a => { if (a.dueDate && a.status !== 'done') day(a.dueDate, 'Due: ' + a.title, [a.owner ? 'Owner: ' + a.owner : '', a.doneEvidence ? 'Done when: ' + a.doneEvidence : '', location.href].filter(Boolean).join('\n'), 'ios-action-' + a.id); });
+  if (st.review90On && !st.review90Done) day(st.review90On, '90-day review: ' + ORG_NAME, 'Did the actions happen, are the early signs moving, does the diagnosis still hold?\n' + location.href, 'ios-review90-' + st.review90On);
+  if (st.reassessOn && !st.reassessDone) day(st.reassessOn, 'Six-month reassessment: ' + ORG_NAME, location.href, 'ios-reassess-' + st.reassessOn);
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Frankly Inspired//InstitutionalOS//EN', 'CALSCALE:GREGORIAN', ...ev, 'END:VCALENDAR'].join('\r\n') + '\r\n';
+}
+function planCsv() {
+  const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const rows = [['Action', 'Owner', 'Due', 'Status', 'Done when', 'Note']].concat((PLAN_CACHE && PLAN_CACHE.actions || []).map(a => [a.title, a.owner, a.dueDate, ACT_LABELS[a.status] || a.status, a.doneEvidence, a.note]));
+  return '\ufeff' + rows.map(r => r.map(q).join(',')).join('\r\n') + '\r\n';
+}
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'exportIcs') downloadFile('90-day-plan.ics', 'text/calendar', planIcs());
+  if (e.target.id === 'exportCsv') downloadFile('90-day-plan.csv', 'text/csv', planCsv());
+});
+
 function planHtml(p) {
   const imp = (p && p.improvement) || {};
+  PLAN_CACHE = imp;
   const plan = imp.plan || {}, acts = imp.actions || [], revs = imp.reviews || [];
-  if (!plan.target && !acts.length) return '';
+  if (!plan.target && !acts.length) return '<section class="card" id="plan"><h2>Your 90-Day Improvement Plan</h2><p class="muted" style="margin:0">Your plan appears here after the readout: one target, a few actions with owners and dates, and a 15-minute weekly check-in.</p></section>';
   const actRows = acts.map((a) => `<div class="plan-act ${a.status === 'done' ? 'done' : ''}" data-id="${a.id}">
       <div><div class="t"><strong>${esc(a.title)}</strong></div>
         <div class="muted">${[a.owner, a.dueDate ? 'due ' + fmtDate(a.dueDate) : ''].filter(Boolean).map(esc).join(' &middot; ')}</div>
@@ -381,6 +435,7 @@ function planHtml(p) {
     <h2>Your 90-Day Improvement Plan</h2>
     ${plan.target ? `<p class="lead"><strong>Target:</strong> ${esc(plan.target)}${plan.baseline ? `<br><strong>Today:</strong> ${esc(plan.baseline)}` : ''}${plan.leadingSigns ? `<br><strong>Early signs it's working:</strong> ${esc(plan.leadingSigns)}` : ''}</p>` : ''}
     ${actRows || '<p class="muted">Actions will appear here once we agree on them.</p>'}
+    ${acts.length ? `<div class="export no-print"><button class="btn btn-ghost" type="button" id="exportIcs">Add due dates to my calendar</button><button class="btn btn-ghost" type="button" id="exportCsv">Download as a spreadsheet</button></div>` : ''}
     <p class="muted no-print" id="actMsg" style="min-height:1em"></p>
     <div class="checkin no-print">
       <h3 style="margin-top:14px">Weekly check-in (15 minutes)</h3>
@@ -441,23 +496,30 @@ function recordHtml(p) {
 
 function selfVsHtml(p, r) {
   const self = (p && p.selfScores) || {};
+  const perc = (p && p.perception) || {};
+  const lead = perc.dimensions || {};
   const dims = (r && r.dimensions) || [];
-  if (!Object.keys(self).length || !dims.length) return '';
+  const hasLead = Object.keys(lead).length > 0;
+  if ((!Object.keys(self).length && !hasLead) || !dims.length) return '';
   const rows = dims.map((d) => {
     const key = DIM_KEYS[d.name] === 'financial' ? 'revenue' : DIM_KEYS[d.name];
-    const sv = self[key];
+    const L = lead[key];
+    const sv = hasLead && L ? L.avg : self[key];
     if (typeof sv !== 'number') return '';
     const gap = Math.round(sv - d.score);
-    return `<div class="dim"><div class="name">${esc(d.name)}<small>${Math.abs(gap) >= 20 ? 'Your view and the evidence differ' : 'Close to the evidence'}</small></div>
-      <div class="track" role="img" aria-label="${esc(d.name)}: you said ${sv}, evidence shows ${r0(d.score)}">
+    const label = hasLead && L ? `leaders said ${L.avg}${L.n > 1 ? ` (${L.min}–${L.max})` : ''}` : `you said ${sv}`;
+    const note = Math.abs(gap) >= 20 ? 'Your view and the evidence differ' : 'Close to the evidence';
+    const split = hasLead && L && L.n > 1 && L.max - L.min >= 40 ? ' · leaders disagree' : '';
+    return `<div class="dim"><div class="name">${esc(d.name)}<small>${note}${split}</small></div>
+      <div class="track" role="img" aria-label="${esc(d.name)}: ${label}, evidence shows ${r0(d.score)}">
         <div class="fill" style="width:${Math.max(2, Math.min(100, d.score))}%"></div>
         <div class="tick" style="left:calc(${Math.min(100, sv)}% - 1px);background:var(--gold)"></div>
       </div>
-      <div class="nums"><b>${r0(d.score)}</b><small>you said ${sv}</small></div></div>`;
+      <div class="nums"><b>${r0(d.score)}</b><small>${label}</small></div></div>`;
   }).join('');
   if (!rows) return '';
   return `<section class="card"><h2>Your view and the evidence</h2>
-    <p class="lead">The bar is the verified score; the gold mark is what your self-assessment said. The biggest gaps usually point to the real constraint.</p>${rows}</section>`;
+    <p class="lead">The bar is the verified score; the gold mark is what ${hasLead ? `your leadership team said (${perc.respondents} ${perc.respondents === 1 ? 'response' : 'responses'})` : 'your self-assessment said'}. The biggest gaps usually point to the real constraint.</p>${rows}</section>`;
 }
 
 function closeoutHtml(p) {
@@ -502,10 +564,41 @@ async function load() {
     const d = await fetchReport(token, !!client);
     document.title = d.org.name + (client ? ' | Client Portal' : ' | InstitutionalOS Report');
     PORTAL_TOKEN = client || '';
-    app.innerHTML = heroHtml(d) + '<main><div class="wrap">' + (client ? nextActionHtml(d.portal) + sessionHtml(d.portal) : '') +
-      constraintHtml(d.readiness || {}) + (client ? recordHtml(d.portal) + planHtml(d.portal) + selfVsHtml(d.portal, d.readiness) : '') + dimsHtml(d.readiness || {}) + historyHtml(d.history) + (client ? updatesHtml(d.updates) + closeoutHtml(d.portal) : '') +
-      sealHtml((d.readiness || {}).candidSeal) + (client ? outcomesHtml(d.outcomes) : '') + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + (client ? nextHtml() : funderNoteHtml()) +
-      '</div></main>';
+    ORG_NAME = d.org.name;
+    if (client) {
+      const R = d.readiness || {};
+      const docs = d.portal && d.portal.documentsUrl ? `<section class="card"><h2>Your documents</h2><p>Plans, memos, and working files we share, in one folder.</p><a class="btn btn-ghost" href="${esc(d.portal.documentsUrl)}" target="_blank" rel="noopener">Open your folder</a></section>` : '';
+      const panels = {
+        home: nextActionHtml(d.portal) + contextHtml(d.portal) + sessionHtml(d.portal) + nextHtml(),
+        health: dimsHtml(R) + selfVsHtml(d.portal, R) + historyHtml(d.history) + sealHtml(R.candidSeal),
+        priority: constraintHtml(R) + recordHtml(d.portal),
+        plan: planHtml(d.portal) + updatesHtml(d.updates),
+        evidence: docs + closeoutHtml(d.portal) + outcomesHtml(d.outcomes) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability),
+      };
+      const names = { home: 'Home', health: 'Health', priority: 'Priority', plan: '90-Day Plan', evidence: 'Evidence' };
+      app.innerHTML = heroHtml(d) + `<nav class="tabs no-print" aria-label="Portal sections"><div class="wrap" role="tablist">${Object.keys(names).map(k => `<button type="button" role="tab" id="tab-${k}" aria-controls="panel-${k}" data-tab="${k}">${names[k]}</button>`).join('')}</div></nav>` +
+        '<main><div class="wrap">' + Object.keys(panels).map(k => `<div class="tab-panel" role="tabpanel" id="panel-${k}" aria-labelledby="tab-${k}">${panels[k] || '<section class="card"><p class="muted" style="margin:0">Nothing here yet.</p></section>'}</div>`).join('') + '</div></main>';
+      const show = (k, focus) => {
+        if (!names[k]) k = 'home';
+        document.querySelectorAll('.tabs button').forEach(b => { const on = b.dataset.tab === k; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
+        document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = p.id !== 'panel-' + k; });
+        if (location.hash.slice(1) !== k) history.replaceState(null, '', location.pathname + location.search + '#' + k);
+      };
+      const tabs = document.querySelector('.tabs');
+      tabs.addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) { show(b.dataset.tab); window.scrollTo({ top: tabs.offsetTop, behavior: 'smooth' }); } });
+      tabs.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        const keys = Object.keys(names), cur = keys.indexOf(document.querySelector('.tabs button[aria-selected="true"]').dataset.tab);
+        show(keys[(cur + (e.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length], true);
+      });
+      document.addEventListener('click', (e) => { const a = e.target.closest('a[href^="#"]'); if (a && names[a.getAttribute('href').slice(1)]) { e.preventDefault(); show(a.getAttribute('href').slice(1)); } });
+      show(location.hash.slice(1) || 'home');
+    } else {
+      app.innerHTML = heroHtml(d) + '<main><div class="wrap">' +
+        constraintHtml(d.readiness || {}) + dimsHtml(d.readiness || {}) + historyHtml(d.history) +
+        sealHtml((d.readiness || {}).candidSeal) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability) + funderNoteHtml() +
+        '</div></main>';
+    }
   } catch (e) {
     app.innerHTML = '<div class="wrap state"><h1>We couldn’t open this report</h1><p class="error">' + esc(e.message) + '</p><p class="muted">Email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a> and he’ll send a fresh link.</p></div>';
   }

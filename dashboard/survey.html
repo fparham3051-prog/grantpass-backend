@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Leader Survey | Frankly Inspired</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --navy: #11233D; --navy-deep: #0B1A2D;
+  --gold: #B28E42; --gold-light: #CBA869; --gold-access: #8E7134; --gold-soft: #F3ECDC;
+  --charcoal: #23282D; --muted: #55606B; --line: #E2E6EA; --bg-soft: #F3F5F7;
+  --red: #B42828; --green: #1E7A4C; --green-bg: #E4F3EC;
+  --font-heading: "Playfair Display", Georgia, serif;
+  --font-body: Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg-soft); color: var(--charcoal); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+h1, h2, h3 { font-family: var(--font-heading); color: var(--navy); font-weight: 600; line-height: 1.2; margin: 0 0 .5em; }
+a { color: var(--gold-access); }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+.site-header { background: #fff; border-bottom: 1px solid var(--line); }
+.site-header .wrap { display: flex; align-items: center; gap: 10px; padding-top: 14px; padding-bottom: 14px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-heading); font-weight: 600; font-size: 19px; color: var(--navy); text-decoration: none; }
+.brand .mark { width: 26px; height: 26px; border-radius: 6px; background: var(--navy); color: var(--gold-light); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.hero { background: linear-gradient(135deg, var(--navy), var(--navy-deep)); color: #fff; padding: 34px 0 36px; }
+.eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 600; color: var(--gold-light); margin: 0 0 10px; }
+.hero h1 { color: #fff; font-size: clamp(26px, 4.5vw, 36px); }
+.hero p { color: #C9D2DD; margin: 0; max-width: 620px; }
+main { padding: 24px 0 40px; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+.card h2 { font-size: 20px; }
+.scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+.scale div { background: var(--bg-soft); border-radius: 8px; padding: 6px 8px; }
+.scale b { color: var(--navy); display: block; }
+.q { padding: 14px 0; border-top: 1px solid var(--line); }
+.q:first-of-type { border-top: none; }
+.q p { margin: 0 0 8px; }
+.opts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.opts label { display: block; text-align: center; border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; cursor: pointer; font-size: 13px; background: #fff; }
+.opts input { position: absolute; opacity: 0; pointer-events: none; }
+.opts input:checked + span { font-weight: 700; color: var(--navy); }
+.opts label:has(input:checked) { border-color: var(--gold); background: var(--gold-soft); }
+.opts input:focus-visible + span { outline: 2px solid var(--gold-access); outline-offset: 2px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label.f { display: block; font-weight: 600; font-size: 13px; color: var(--navy); margin: 0 0 4px; }
+select, input[type=text] { width: 100%; font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; padding: 11px 20px; font-weight: 600; font-size: 15px; border: none; cursor: pointer; background: var(--gold); color: var(--navy-deep); font-family: var(--font-body); }
+.btn:disabled { opacity: .6; cursor: wait; }
+.muted { color: var(--muted); font-size: 13.5px; }
+.err { color: var(--red); font-weight: 600; }
+.progress { position: sticky; top: 0; background: var(--bg-soft); padding: 8px 0; z-index: 2; font-size: 13px; color: var(--muted); }
+.bar { height: 6px; background: #E2E6EA; border-radius: 999px; overflow: hidden; margin-top: 4px; }
+.bar span { display: block; height: 100%; background: var(--green); width: 0; transition: width .2s; }
+.state { padding: 60px 0; text-align: center; }
+@media (max-width: 560px) {
+  .opts { grid-template-columns: 1fr; }
+  .opts label { text-align: left; padding: 9px 12px; }
+  .scale { grid-template-columns: 1fr; }
+  .row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header class="site-header"><div class="wrap"><a class="brand" href="https://franklyinspired.associates"><span class="mark">F</span>Frankly Inspired</a></div></header>
+<div id="app"><div class="wrap state"><p class="muted">Loading the survey...</p></div></div>
+<script>
+const PRIMARY_API = 'https://grantpass-backend.onrender.com';
+const DIM_LABELS = { strategy: 'Strategy and Positioning', program: 'Program and Impact Evidence', revenue: 'Revenue and Financial Health', leadership: 'Leadership and Organizational Capacity', operations: 'Operations and Infrastructure', partnerships: 'Partnerships and Ecosystem', governance: 'Governance and Risk' };
+const LEVELS = ['Not in place', 'Talked about', 'Informal', 'Documented', 'Verified'];
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const params = new URLSearchParams(location.search);
+const token = params.get('s') || '';
+const apiParam = (params.get('api') || '').replace(/\/+$/, '');
+const API = /^(https:\/\/[\w.-]+|http:\/\/(localhost|127\.0\.0\.1))(:\d+)?$/.test(apiParam) ? apiParam : PRIMARY_API;
+let survey = null;
+
+function render() {
+  const app = document.getElementById('app');
+  const byDim = Object.keys(DIM_LABELS).map(k => ({ k, items: survey.items.filter(i => i.dim === k) })).filter(g => g.items.length);
+  app.innerHTML = `<section class="hero"><div class="wrap"><p class="eyebrow">Leader survey · about 6 minutes</p>
+      <h1>${esc(survey.orgName)}</h1>
+      <p>How would you rate the organization today? Your answers are combined with other leaders' to show where the team sees things the same way, and where it doesn't. Only Franklin sees individual responses.</p></div></section>
+    <main><div class="wrap">
+      <div class="card"><h2>How to answer</h2><p class="muted" style="margin:0">For each practice, choose the level you could <strong>show evidence for</strong>, not how much you agree. Between two levels, choose the lower one.</p>
+        <div class="scale">${LEVELS.map((l, i) => `<div><b>${i + 1} · ${l}</b>${['We don’t do this', 'Discussed, not acted on', 'Done, not written down', 'Written and in use', 'Reviewed; would hold up to a funder'][i]}</div>`).join('')}</div></div>
+      <div class="progress" aria-live="polite"><span id="count">0 of ${survey.items.length} answered</span><div class="bar"><span id="bar"></span></div></div>
+      <form id="form">
+      ${byDim.map(g => `<div class="card"><h2>${DIM_LABELS[g.k]}</h2>${g.items.map((it, n) => `<fieldset class="q" style="border:none;margin:0;padding-left:0;padding-right:0;"><legend><p>${esc(it.text)}</p></legend>
+          <div class="opts">${LEVELS.map((l, i) => `<label><input type="radio" name="${esc(it.id)}" value="${i + 1}"><span>${i + 1} · ${l}</span></label>`).join('')}</div></fieldset>`).join('')}</div>`).join('')}
+      <div class="card"><h2>About you</h2>
+        <div class="row"><div><label class="f" for="role">Your role</label><select id="role" required><option value="">Choose</option><option value="executive">Executive director or CEO</option><option value="board">Board member</option><option value="staff">Staff leader</option><option value="other">Other</option></select></div>
+        <div><label class="f" for="name">Your name (optional)</label><input type="text" id="name" maxlength="120" autocomplete="name"></div></div>
+        <p class="muted">Leave your name blank to answer anonymously. Your role is used to compare how the board, the executive, and staff see the organization.</p>
+        <button class="btn" type="submit" id="submit">Submit my answers</button> <span id="msg" role="status"></span>
+      </div></form>
+    </div></main>`;
+  const form = document.getElementById('form');
+  form.addEventListener('change', () => {
+    const n = survey.items.filter(it => form.querySelector(`input[name="${CSS.escape(it.id)}"]:checked`)).length;
+    document.getElementById('count').textContent = `${n} of ${survey.items.length} answered`;
+    document.getElementById('bar').style.width = Math.round(100 * n / survey.items.length) + '%';
+  });
+  form.addEventListener('submit', submit);
+}
+
+async function submit(e) {
+  e.preventDefault();
+  const form = document.getElementById('form'), msg = document.getElementById('msg'), btn = document.getElementById('submit');
+  const answers = {};
+  survey.items.forEach(it => { const c = form.querySelector(`input[name="${CSS.escape(it.id)}"]:checked`); if (c) answers[it.id] = Number(c.value); });
+  const role = document.getElementById('role').value;
+  if (!role) { msg.className = 'err'; msg.textContent = 'Choose your role.'; document.getElementById('role').focus(); return; }
+  if (Object.keys(answers).length < 14) { msg.className = 'err'; msg.textContent = 'Answer at least two practices in each area.'; return; }
+  btn.disabled = true; msg.className = 'muted'; msg.textContent = 'Sending (this can take up to a minute the first time)...';
+  try {
+    const res = await fetch(API + '/public/survey/' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, role, name: document.getElementById('name').value.trim() }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'Could not send. Please try again.');
+    document.getElementById('app').innerHTML = `<div class="wrap state"><h1>Thank you</h1><p class="muted">Your answers were recorded for ${esc(survey.orgName)}. Franklin will walk through what the leadership team said, together with the evidence, at the readout.</p></div>`;
+    window.scrollTo(0, 0);
+  } catch (err) { msg.className = 'err'; msg.textContent = err.message; btn.disabled = false; }
+}
+
+(async () => {
+  const app = document.getElementById('app');
+  if (!token) { app.innerHTML = '<div class="wrap state"><h1>Survey link needed</h1><p class="muted">Open the link Franklin sent you.</p></div>'; return; }
+  try {
+    const res = await fetch(API + '/public/survey/' + encodeURIComponent(token));
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(res.status === 404 ? 'This survey link isn’t valid anymore. Ask Franklin for a fresh one.' : (d.error || 'Could not load the survey.'));
+    survey = d; render();
+  } catch (e) { app.innerHTML = '<div class="wrap state"><h1>We couldn’t open this survey</h1><p class="err">' + esc(e.message) + '</p><p class="muted">Email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a>.</p></div>'; }
+})();
+</script>
+</body>
+</html>
