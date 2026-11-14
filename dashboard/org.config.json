@@ -34,7 +34,7 @@
     "freeCheckup": "https://franklyinspired.associates/tools"
   },
   "modules": {
-    "_about": "Turn whole areas on or off. consulting/institutionalos/marketScan/donorAnalysis/myDesk fit a consulting practice; grantmaking and fundraising are the foundation areas (planned; see docs/NEW-ORGANIZATION.md).",
+    "_about": "Turn whole areas on or off (also in Settings > Areas). consulting/institutionalos/marketScan/donorAnalysis/myDesk fit a consulting practice; grantmaking (giving grants) and fundraising (donors and gifts) are the foundation areas. See docs/NEW-ORGANIZATION.md.",
     "consulting": true,
     "institutionalos": true,
     "marketScan": true,
@@ -42,8 +42,8 @@
     "givingLandscape": true,
     "fieldIntelligence": true,
     "myDesk": true,
-    "grantmaking": false,
-    "fundraising": false
+    "grantmaking": true,
+    "fundraising": true
   },
   "offers": [
     {
@@ -128,7 +128,11 @@
     "_about": "Words the apps use for the people and records they track. A foundation might use Grantee / Grant / Donor.",
     "client": "Client",
     "clients": "Clients",
-    "record": "Pipeline record"
+    "record": "Pipeline record",
+    "grantee": "Grantee",
+    "grantees": "Grantees",
+    "donor": "Donor",
+    "donors": "Donors"
   },
   "engagement": {
     "_about": "Standard terms for the engagement letter the operations app prints from a pipeline record (Pipeline > Letter). Plain language; have counsel review before first use.",
@@ -137,5 +141,23 @@
     "data": "Your scores and documents are kept for the engagement and three years after it ends, then deleted unless you ask us to keep them.",
     "ending": "Either side can end the engagement with 14 days' written notice. You pay for work done up to that date.",
     "signature": "To accept, sign below or reply to the email this letter came with saying you accept."
+  },
+  "grantmaking": {
+    "_about": "Standard conditions printed on every grant award letter (Grants > application > Award letter). Plain language; have counsel review before first use.",
+    "conditions": [
+      "Funds will be used only for the purpose described above, within the grant period. Any change needs our written approval first.",
+      "Unspent funds at the end of the grant period will be returned unless we agree otherwise in writing.",
+      "Your organization is, and will remain during the grant, a tax-exempt public charity or otherwise eligible to receive this grant.",
+      "No part of the grant will be used for lobbying, political campaigns, or to benefit any individual's private interest.",
+      "You will keep records of how the grant was spent for at least three years and share them if asked.",
+      "You'll tell us promptly about any change in leadership, tax status, or anything that affects the work."
+    ]
+  },
+  "fundraising": {
+    "_about": "Used on donor thank-you letters and receipts. Leave ein empty until the organization is a registered 501(c)(3); letters then print without tax-receipt wording. fiscalYearStartMonth: 1 = January, 7 = July.",
+    "ein": "",
+    "taxStatus": "",
+    "fiscalYearStartMonth": 1,
+    "thankYouLine": "Your support makes this work possible, and we're grateful to have you with us."
   }
 }
