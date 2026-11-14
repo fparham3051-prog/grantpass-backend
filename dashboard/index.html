@@ -137,9 +137,37 @@
   .dropzone strong { color:var(--navy); }
   .dropzone input[type=file] { display:none; }
   .dropzone .dz-status { margin-top:6px; }
+
+  /* ---- One front door (same switcher as the operations app) ---- */
+  .fi-switcher { background:#0B1A2D; border-bottom:1px solid rgba(203,168,105,.25); font-size:13px; }
+  .fi-switcher-inner { max-width:1100px; margin:0 auto; padding:0 20px; display:flex; align-items:center; gap:4px; min-height:40px; flex-wrap:wrap; }
+  .fi-switcher-brand { font-family:"Playfair Display",Georgia,serif; color:#CBA869; font-weight:600; margin-right:14px; }
+  .fi-switcher a { color:#C9D2DD; text-decoration:none; padding:6px 12px; border-radius:999px; }
+  .fi-switcher a:hover { background:rgba(255,255,255,.06); color:#fff; }
+  .fi-switcher a[aria-current="page"] { background:var(--gold); color:var(--navy-deep); font-weight:600; }
+  .fi-sw-sub { opacity:.7; font-size:11.5px; margin-left:4px; }
+  @media (max-width:520px) { .fi-switcher-brand, .fi-sw-sub { display:none; } }
+  /* ---- Client page in the same five tabs as the client portal ---- */
+  .dtabs { display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin:4px 0 18px; }
+  .dtab { background:none; border:none; border-bottom:3px solid transparent; padding:10px 14px; font:inherit; font-weight:600; font-size:14px; color:var(--ink-soft); cursor:pointer; margin-bottom:-1px; }
+  .dtab:hover { color:var(--navy); }
+  .dtab[aria-selected="true"] { color:var(--navy); border-bottom-color:var(--gold); }
+  .dtab:focus-visible { outline:2px solid var(--gold-access); outline-offset:2px; }
+  .dtab-pane[hidden] { display:none; }
+  .dtab-pane > h3:first-child { margin-top:4px; }
+  .home-next { background:var(--accent-soft); border-left:4px solid var(--gold); border-radius:10px; padding:14px 16px; margin:0 0 18px; }
+  .home-next .muted { color:var(--ink-soft); }
 </style>
 </head>
 <body>
+<nav class="fi-switcher" aria-label="Frankly Inspired apps">
+  <div class="fi-switcher-inner">
+    <span class="fi-switcher-brand">Frankly Inspired</span>
+    <a href="https://frankly-inspired-os.onrender.com/">Operations</a>
+    <a href="/" aria-current="page">Clients <span class="fi-sw-sub">InstitutionalOS</span></a>
+    <a href="https://franklyinspired.associates/" target="_blank" rel="noopener">Website</a>
+  </div>
+</nav>
 <div class="wrap">
   <header>
     <div><div class="logo">InstitutionalOS <span>Console</span></div><a href="https://franklyinspired.associates" style="color:#CBA869;font-size:12.5px;text-decoration:none">&larr; Frankly Inspired and Associates</a></div>
@@ -1600,10 +1628,13 @@ function renderPlan(d) {
   set('planReviewDay', p.reviewDay); set('planSigns', p.leadingSigns);
   document.getElementById('planClosed').checked = p.status === 'closed';
   const n = st.nextAction || {};
-  document.getElementById('planNext').innerHTML = `<strong>Next action:</strong> ${escP(n.text || '')}` +
+  const planNextEl = document.getElementById('planNext');
+  planNextEl.innerHTML = `<strong>Next action:</strong> ${escP(n.text || '')}` +
     (st.actionsTotal ? `<div class="muted" style="margin-top:4px;">${st.actionsDone} of ${st.actionsTotal} actions done` +
       (st.actionsBlocked ? ` · <span style="color:var(--red);font-weight:700;">${st.actionsBlocked} blocked</span>` : '') +
       (st.actionsOverdue ? ` · ${st.actionsOverdue} past due` : '') + (st.lastReviewOn ? ` · last check-in ${fmtD(st.lastReviewOn)}` : '') + '</div>' : '');
+  const homeNext = document.getElementById('homeNext');
+  if (homeNext) homeNext.innerHTML = planNextEl.innerHTML || '<strong>Next action:</strong> set up the 90-Day Improvement Plan on the Plan tab.';
   document.getElementById('planDates').textContent = st.startDate
     ? `90-day review ${fmtD(st.review90On)}${st.review90Done ? ' (held)' : ''} · six-month reassessment ${fmtD(st.reassessOn)} · standard practice ${st.standardizeDone}/${st.standardizeTotal}`
     : 'Set a start date to schedule the 90-day review and the six-month reassessment.';
@@ -1864,6 +1895,69 @@ document.getElementById('createFunderBtn').addEventListener('click', async () =>
     statusEl.textContent = e.message;
   }
 });
+
+// ---- Client page tabs: Home, Health, Priority, Plan, Evidence ----
+// Same five tabs, in the same order, as the client's own portal, so Franklin
+// and the client look at one structure. Sections are grouped by their
+// heading once at load; nothing else about them changes.
+(function buildDetailTabs() {
+  const panel = document.getElementById('orgDetailPanel');
+  const stageRow = document.getElementById('orgDetailStage')?.closest('div');
+  if (!panel || !stageRow) return;
+  const TABS = [['home', 'Home'], ['health', 'Health'], ['priority', 'Priority'], ['plan', '90-Day Plan'], ['evidence', 'Evidence']];
+  const BY_HEADING = {
+    'Client Portal': 'home', 'Share With a Funder': 'home',
+    'Full Report': 'health', 'Score History': 'health', 'Financial Data': 'health', 'Dimension Scores': 'health',
+    'Diagnostic Record': 'priority',
+    '90-Day Improvement Plan': 'plan', 'Outcome Reports': 'plan',
+    'Evidence Vault': 'evidence', 'Compliance Calendar': 'evidence',
+  };
+  const panes = {};
+  const bar = document.createElement('div');
+  bar.className = 'dtabs'; bar.setAttribute('role', 'tablist'); bar.setAttribute('aria-label', 'Client record');
+  TABS.forEach(([key, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'dtab'; b.textContent = label; b.dataset.dtab = key;
+    b.setAttribute('role', 'tab'); b.id = 'dtab-' + key; b.setAttribute('aria-controls', 'dpane-' + key);
+    bar.appendChild(b);
+    const pane = document.createElement('div');
+    pane.className = 'dtab-pane'; pane.id = 'dpane-' + key; pane.setAttribute('role', 'tabpanel'); pane.setAttribute('aria-labelledby', 'dtab-' + key);
+    panes[key] = pane;
+  });
+  const home = panes.home;
+  home.innerHTML = '<div class="home-next" id="homeNext" aria-live="polite"><strong>Next action:</strong> loading...</div>';
+  // Walk the sections that follow the stage row and file each under its tab.
+  let node = stageRow.nextSibling, current = 'health';
+  const moving = [];
+  while (node) { moving.push(node); node = node.nextSibling; }
+  moving.forEach((n) => {
+    if (n.nodeType === 1 && n.tagName === 'H3' && BY_HEADING[n.textContent.trim()]) current = BY_HEADING[n.textContent.trim()];
+    panes[current].appendChild(n);
+  });
+  stageRow.after(bar);
+  let anchor = bar;
+  TABS.forEach(([key]) => { anchor.after(panes[key]); anchor = panes[key]; });
+  function show(key) {
+    TABS.forEach(([k]) => {
+      const on = k === key;
+      panes[k].hidden = !on;
+      const b = bar.querySelector(`[data-dtab="${k}"]`);
+      b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+    });
+    try { sessionStorage.setItem('ios_dtab', key); } catch (e) {}
+  }
+  bar.addEventListener('click', (e) => { const b = e.target.closest('[data-dtab]'); if (b) show(b.dataset.dtab); });
+  bar.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const keys = TABS.map(t => t[0]); const cur = keys.indexOf(bar.querySelector('[aria-selected="true"]').dataset.dtab);
+    const next = keys[(cur + (e.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length];
+    show(next); bar.querySelector(`[data-dtab="${next}"]`).focus();
+  });
+  let start = 'home';
+  try { start = sessionStorage.getItem('ios_dtab') || 'home'; } catch (e) {}
+  show(panes[start] ? start : 'home');
+  window.showDetailTab = show;
+})();
 </script>
 </body>
 </html>
