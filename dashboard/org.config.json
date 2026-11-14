@@ -34,7 +34,7 @@
     "freeCheckup": "https://franklyinspired.associates/tools"
   },
   "modules": {
-    "_about": "Turn whole areas on or off (also in Settings > Areas). consulting/institutionalos/marketScan/donorAnalysis/myDesk fit a consulting practice; grantmaking (giving grants) and fundraising (donors and gifts) are the foundation areas. See docs/NEW-ORGANIZATION.md.",
+    "_about": "Turn whole areas on or off (also in Settings > Areas). consulting/institutionalos/marketScan/donorAnalysis/myDesk fit a consulting practice; grantmaking (giving grants), fundraising (donors and gifts), and governance (board meetings, minutes, conflict-of-interest statements, Form 990 checklist, policies) are the foundation areas. See docs/NEW-ORGANIZATION.md.",
     "consulting": true,
     "institutionalos": true,
     "marketScan": true,
@@ -43,7 +43,8 @@
     "fieldIntelligence": true,
     "myDesk": true,
     "grantmaking": true,
-    "fundraising": true
+    "fundraising": true,
+    "governance": true
   },
   "offers": [
     {
@@ -159,5 +160,12 @@
     "taxStatus": "",
     "fiscalYearStartMonth": 1,
     "thankYouLine": "Your support makes this work possible, and we're grateful to have you with us."
+  },
+  "governance": {
+    "_about": "Board settings. quorum: 0 means a majority of voting members; set a number to override (check your bylaws). timeZone is used for calendar files. coiStatement, if set, replaces the standard conflict-of-interest statement members sign. defaultAgenda (one item per line) replaces the standard agenda for new meetings.",
+    "quorum": 0,
+    "timeZone": "America/New_York",
+    "coiStatement": "",
+    "defaultAgenda": ""
   }
 }
