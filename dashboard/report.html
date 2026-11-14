@@ -144,11 +144,11 @@ footer { color: var(--muted); font-size: 13px; text-align: center; padding: 18px
 <body>
 <header class="site-header">
   <div class="wrap">
-    <a class="brand" href="https://franklyinspired.associates"><span class="mark">F</span> Frankly Inspired</a>
+    <a class="brand" href="https://franklyinspired.associates" data-org-link="website"><span class="mark">F</span> <span data-org="shortName">Frankly Inspired</span></a>
     <nav class="header-links">
       <a class="hide-sm" href="https://franklyinspired.associates/health-index">Your Health Index</a>
       <a class="hide-sm" href="https://franklyinspired.associates/consulting">Consulting</a>
-      <a class="btn btn-gold" href="https://calendly.com/fparham/30min" target="_blank" rel="noopener">Talk with Franklin</a>
+      <a class="btn btn-gold" href="https://calendly.com/fparham/30min" data-org-link="booking" target="_blank" rel="noopener">Talk with <span data-org="leader.firstName">Franklin</span></a>
     </nav>
   </div>
 </header>
@@ -157,7 +157,7 @@ footer { color: var(--muted); font-size: 13px; text-align: center; padding: 18px
 
 <footer>
   <div class="wrap">
-    InstitutionalOS is the diagnostic system of <a href="https://franklyinspired.associates">Frankly Inspired and Associates, LLC</a>.
+    InstitutionalOS is the diagnostic system of <a href="https://franklyinspired.associates" data-org-link="website" data-org="legalName">Frankly Inspired and Associates, LLC</a>.
     <a href="https://franklyinspired.associates/methodology">How scoring works</a> &middot; <a href="https://franklyinspired.associates/privacy">Privacy</a>
   </div>
 </footer>
@@ -605,5 +605,6 @@ async function load() {
 }
 load();
 </script>
+<script src="org.js" defer></script>
 </body>
 </html>

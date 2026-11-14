@@ -513,6 +513,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._submit_survey(m.group(1))
             if path == "/orgs/learning-summary" and method == "GET":
                 return self._learning_summary()
+            if path == "/integration/session" and method == "POST":
+                return self._integration_session()
+            if path == "/integration/backup" and method == "GET":
+                return self._integration_backup()
             if path == "/integration/checkins-due" and method == "GET":
                 return self._integration_checkins_due()
             m = re.match(r"^/integration/orgs/(\d+)/reminded$", path)
@@ -1254,6 +1258,35 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     # ---------- reminders and demo data, for the other systems ----------
+    def _integration_session(self):
+        """One sign-in: the operations app (signed in, owner or staff) asks
+        for a console session for the integration user and hands it to the
+        browser. Short-lived (12 hours); the console keeps it like a normal
+        login. Only service-to-service, never from a browser directly."""
+        user_id = get_integration_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "integration key required"})
+        conn = db.get_conn()
+        row = conn.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+        conn.close()
+        return json_response(self, 200, {"token": auth.make_token(user_id, ttl_seconds=12 * 3600), "email": row["email"] if row else "", "userId": user_id})
+
+    def _integration_backup(self):
+        """Full export of every table for the nightly backup the operations
+        app collects. Read-only. Rows as plain JSON; restore with
+        scripts/restore_backup.py."""
+        user_id = get_integration_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "integration key required"})
+        conn = db.get_conn()
+        tables = db.list_tables(conn)
+        out = {"app": "institutionalos", "exportedAt": db.now(), "tables": {}}
+        for t in tables:
+            rows = conn.execute(f'SELECT * FROM "{t}"').fetchall()
+            out["tables"][t] = [dict(r) for r in rows]
+        conn.close()
+        return json_response(self, 200, out)
+
     def _integration_checkins_due(self):
         """For the website backend's daily reminder run: clients whose weekly
         check-in is due, who have a contact email and reminders on, and who

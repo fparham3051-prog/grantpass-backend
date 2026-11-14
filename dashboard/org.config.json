@@ -1,0 +1,141 @@
+{
+  "_about": "One organization profile. The operations app (FIOS), the InstitutionalOS console and client portal, and the website each keep an identical copy of this file. To set the system up for another organization, copy the three apps, change this file in each, and follow docs/NEW-ORGANIZATION.md. Nothing secret belongs here: passwords and keys stay in Render's environment settings.",
+  "version": 1,
+  "org": {
+    "type": "consulting",
+    "name": "Frankly Inspired and Associates",
+    "shortName": "Frankly Inspired",
+    "legalName": "Frankly Inspired and Associates, LLC",
+    "tagline": "When growth outpaces the institution",
+    "leader": {
+      "name": "Franklin D. Parham",
+      "firstName": "Franklin",
+      "title": "Founder and Principal"
+    },
+    "email": "franklin@franklyinspired.associates",
+    "phone": "240-391-8283",
+    "region": "DC, Maryland, and Virginia"
+  },
+  "brand": {
+    "mark": "F",
+    "navy": "#11233D",
+    "navyDeep": "#0B1A2D",
+    "gold": "#B28E42",
+    "goldLight": "#CBA869",
+    "goldAccessible": "#8E7134",
+    "headingFont": "Playfair Display",
+    "bodyFont": "Inter"
+  },
+  "links": {
+    "website": "https://franklyinspired.associates/",
+    "operations": "https://frankly-inspired-os.onrender.com/",
+    "clients": "https://grantpass-dashboard.onrender.com/",
+    "booking": "https://calendly.com/fparham/30min",
+    "freeCheckup": "https://franklyinspired.associates/tools"
+  },
+  "modules": {
+    "_about": "Turn whole areas on or off. consulting/institutionalos/marketScan/donorAnalysis/myDesk fit a consulting practice; grantmaking and fundraising are the foundation areas (planned; see docs/NEW-ORGANIZATION.md).",
+    "consulting": true,
+    "institutionalos": true,
+    "marketScan": true,
+    "donorAnalysis": true,
+    "givingLandscape": true,
+    "fieldIntelligence": true,
+    "myDesk": true,
+    "grantmaking": false,
+    "fundraising": false
+  },
+  "offers": [
+    {
+      "key": "institutionalos-diagnostic",
+      "name": "InstitutionalOS Diagnostic",
+      "short": "Diagnostic",
+      "price": {
+        "build": 2000,
+        "fund": 2500,
+        "sustain": 2500,
+        "default": 2500
+      },
+      "unit": "one-time",
+      "scope": [
+        "A structured intake with your executive director (and board chair, if you choose), including the decision you need to make and its date",
+        "An evidence review: filed Form 990s, budget, policies, and how work actually runs",
+        "A short leader survey for the executive director, board, and senior staff",
+        "A verified score on seven areas of institutional health, with the evidence behind each",
+        "A written memo naming the one gap most likely to break first, and what's next in line",
+        "A 90-Day Improvement Plan with three to six actions, each with an owner, a date, and the evidence that shows it's done",
+        "A live readout with your leadership team, and access to your private client portal",
+        "A 90-day review of progress against the plan"
+      ]
+    },
+    {
+      "key": "retainer",
+      "name": "Advisory and Implementation Retainer",
+      "short": "Retainer",
+      "price": 2500,
+      "unit": "per month",
+      "note": "$2,500 to $3,500 per month, 3-month recommended minimum",
+      "scope": [
+        "Hands-on implementation support for the 90-Day Improvement Plan",
+        "A weekly 15-minute check-in and a monthly review of whether the diagnosis still holds",
+        "Drafting and review of policies, plans, and funder materials tied to the plan",
+        "Board and leadership meeting support as agreed",
+        "A six-month reassessment of the seven areas"
+      ]
+    },
+    {
+      "key": "project",
+      "name": "Project Based Engagement",
+      "short": "Project",
+      "price": 0,
+      "unit": "priced to scope",
+      "scope": [
+        "Scope, deliverables, and timeline as described in the attached project summary"
+      ]
+    },
+    {
+      "key": "coaching",
+      "name": "1:1 Executive Coaching",
+      "short": "Coaching",
+      "price": 350,
+      "unit": "per session",
+      "scope": [
+        "One-on-one executive coaching sessions of about 60 minutes",
+        "Agreed goals, reviewed every four sessions",
+        "Confidential: nothing discussed is shared with the board or staff without your permission"
+      ]
+    },
+    {
+      "key": "speaking",
+      "name": "Speaking and Board Service",
+      "short": "Speaking",
+      "price": 0,
+      "unit": "quoted per engagement",
+      "scope": [
+        "A talk, workshop, or board session on the agreed topic",
+        "Preparation call beforehand and slides or handouts afterward"
+      ]
+    },
+    {
+      "key": "other",
+      "name": "Other",
+      "short": "Other",
+      "price": 0,
+      "unit": ""
+    }
+  ],
+  "terms": {
+    "_about": "Words the apps use for the people and records they track. A foundation might use Grantee / Grant / Donor.",
+    "client": "Client",
+    "clients": "Clients",
+    "record": "Pipeline record"
+  },
+  "engagement": {
+    "_about": "Standard terms for the engagement letter the operations app prints from a pipeline record (Pipeline > Letter). Plain language; have counsel review before first use.",
+    "payment": "Invoices are due within 15 days. The Diagnostic is invoiced in full at signing. Retainers are invoiced at the start of each month.",
+    "confidentiality": "Everything you share stays confidential. With your written permission only, results may be shared with a funder you name, or used as an anonymous example.",
+    "data": "Your scores and documents are kept for the engagement and three years after it ends, then deleted unless you ask us to keep them.",
+    "ending": "Either side can end the engagement with 14 days' written notice. You pay for work done up to that date.",
+    "signature": "To accept, sign below or reply to the email this letter came with saying you accept."
+  }
+}

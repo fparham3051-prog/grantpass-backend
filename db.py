@@ -393,3 +393,11 @@ def init_db():
 
 def now():
     return datetime.datetime.utcnow().isoformat()
+
+
+def list_tables(conn):
+    """Every table in the public schema, for the backup export."""
+    rows = conn.execute(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name"
+    ).fetchall()
+    return [r["table_name"] for r in rows]

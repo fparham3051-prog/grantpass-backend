@@ -66,7 +66,7 @@ select, input[type=text] { width: 100%; font: inherit; padding: 9px 10px; border
 </style>
 </head>
 <body>
-<header class="site-header"><div class="wrap"><a class="brand" href="https://franklyinspired.associates"><span class="mark">F</span>Frankly Inspired</a></div></header>
+<header class="site-header"><div class="wrap"><a class="brand" href="https://franklyinspired.associates" data-org-link="website"><span class="mark">F</span><span data-org="shortName">Frankly Inspired</span></a></div></header>
 <div id="app"><div class="wrap state"><p class="muted">Loading the survey...</p></div></div>
 <script>
 const PRIMARY_API = 'https://grantpass-backend.onrender.com';
@@ -137,5 +137,6 @@ async function submit(e) {
   } catch (e) { app.innerHTML = '<div class="wrap state"><h1>We couldn’t open this survey</h1><p class="err">' + esc(e.message) + '</p><p class="muted">Email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a>.</p></div>'; }
 })();
 </script>
+<script src="org.js" defer></script>
 </body>
 </html>

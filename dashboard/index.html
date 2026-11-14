@@ -162,15 +162,15 @@
 <body>
 <nav class="fi-switcher" aria-label="Frankly Inspired apps">
   <div class="fi-switcher-inner">
-    <span class="fi-switcher-brand">Frankly Inspired</span>
-    <a href="https://frankly-inspired-os.onrender.com/">Operations</a>
+    <span class="fi-switcher-brand" data-org="shortName">Frankly Inspired</span>
+    <a href="https://frankly-inspired-os.onrender.com/" data-org-link="operations">Operations</a>
     <a href="/" aria-current="page">Clients <span class="fi-sw-sub">InstitutionalOS</span></a>
-    <a href="https://franklyinspired.associates/" target="_blank" rel="noopener">Website</a>
+    <a href="https://franklyinspired.associates/" data-org-link="website" target="_blank" rel="noopener">Website</a>
   </div>
 </nav>
 <div class="wrap">
   <header>
-    <div><div class="logo">InstitutionalOS <span>Console</span></div><a href="https://franklyinspired.associates" style="color:#CBA869;font-size:12.5px;text-decoration:none">&larr; Frankly Inspired and Associates</a></div>
+    <div><div class="logo">InstitutionalOS <span>Console</span></div><a href="https://franklyinspired.associates" data-org-link="website" style="color:#CBA869;font-size:12.5px;text-decoration:none">&larr; Frankly Inspired and Associates</a></div>
     <div class="api-row">
       <button class="btn btn-ghost btn-sm hidden" id="logoutBtn">Log out</button>
       <details class="conn">
@@ -623,6 +623,20 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+// One sign-in: the operations app sends you here signed in, carrying a
+// console session in the address (#sso=...). Keep it like a normal login
+// and clear it from the address bar right away.
+(function ssoFromHash() {
+  const h = location.hash || '';
+  const m = h.match(/sso=([^&]+)/);
+  if (!m) return;
+  try {
+    localStorage.setItem('gp_token', decodeURIComponent(m[1]));
+    const a = h.match(/api=([^&]+)/);
+    if (a) localStorage.setItem('gp_api', decodeURIComponent(a[1]));
+  } catch (e) {}
+  history.replaceState(null, '', location.pathname + location.search);
+})();
 const RUBRIC = [
   { key:'strategy', name:'Strategy and Positioning', weight:10 },
   { key:'program', name:'Program and Impact Evidence', weight:20 },
@@ -1959,5 +1973,6 @@ document.getElementById('createFunderBtn').addEventListener('click', async () =>
   window.showDetailTab = show;
 })();
 </script>
+<script src="org.js" defer></script>
 </body>
 </html>
