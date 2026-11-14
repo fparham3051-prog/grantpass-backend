@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+// The public quick check-up lives on franklyinspired.associates/quick-check-up/
+// (copied by the website's scripts/sync-quick-checkup.py). Direct visits to
+// this Render address go there; FIOS embeds (?fios=1) stay here.
+if (location.hostname.endsWith('onrender.com') && new URLSearchParams(location.search).get('fios') !== '1') {
+  location.replace('https://franklyinspired.associates/quick-check-up/' + location.search + location.hash);
+}
+</script>
 <title>InstitutionalOS — Health Index Engine | Frankly Inspired</title>
 <meta name="description" content="InstitutionalOS scores your nonprofit across BUILD, FUND, and SUSTAIN — the seven dimensions funders and boards actually weigh, free, in seconds — part of Frankly Inspired and Associates, LLC.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
