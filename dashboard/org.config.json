@@ -167,5 +167,138 @@
     "timeZone": "America/New_York",
     "coiStatement": "",
     "defaultAgenda": ""
+  },
+  "library": {
+    "_about": "Starter list for Library > What we deliver. Loaded once into the database the first time the Process Library opens; after that, edit materials in the app. Links should be ones the people who need them can open (a shared Drive folder, not a private link).",
+    "materials": [
+      {
+        "title": "Fundraising Fluency",
+        "kind": "curriculum",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/3685944c-47a2-43b8-9e43-5b5061caa685",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "The Build Before the Ask",
+        "kind": "curriculum",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/f4a695e3-709c-418c-8b67-ba3401224b3a",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "Zero to Portfolio",
+        "kind": "curriculum",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/f8bde11d-1bcc-4814-8cdb-2e53387fd63c",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "The Funding Pathway Finder",
+        "kind": "curriculum",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/c82a297b-f31c-4235-88b5-50bb4ee4fe4c",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "The Governing Foundation",
+        "kind": "curriculum",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/8e82bfc1-080d-429c-8cce-4a859deb5ac8",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "Signal Before System",
+        "kind": "strategy",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/c12391ca-aa22-431a-9531-8002beca1626",
+        "notes": "Vision, packaging rules"
+      },
+      {
+        "title": "Before Scale",
+        "kind": "strategy",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/f9ef9433-9743-4044-86ea-d2272fcb4c09",
+        "notes": "Data, the validation gate"
+      },
+      {
+        "title": "Call Before You Build",
+        "kind": "playbook",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/c934e1fd-4577-490c-a364-7a3d8e26c5b4",
+        "notes": "Data, Pipeline sourcing"
+      },
+      {
+        "title": "The InstitutionalOS Runbook",
+        "kind": "playbook",
+        "audience": "internal",
+        "area": "institutionalos",
+        "link": "https://claude.ai/code/artifact/b971a0f8-1f32-4f84-a575-429b0430db4b",
+        "notes": "Process, the run of show"
+      },
+      {
+        "title": "Your Governing Foundation",
+        "kind": "curriculum",
+        "audience": "client-safe",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/c96f2946-a928-47b3-b49e-cfbc554c523d",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "The InstitutionalOS Workbook",
+        "kind": "workbook",
+        "audience": "client-safe",
+        "area": "institutionalos",
+        "link": "https://claude.ai/code/artifact/7b0513a3-678a-43f7-9e86-ba58b20909f6",
+        "notes": "Process, the paper trail"
+      },
+      {
+        "title": "Your Fundraising Fluency",
+        "kind": "curriculum",
+        "audience": "client-safe",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/057b68e9-111e-48b7-a0e7-44f2298f2209",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "Your Build Before the Ask",
+        "kind": "curriculum",
+        "audience": "client-safe",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/ae21622f-3a7f-42ba-a2e6-a828b3689197",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "Your Zero to Portfolio",
+        "kind": "curriculum",
+        "audience": "client-safe",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/99638d09-1324-4f56-a745-268d9d6a9d58",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "Your Funding Pathway Finder",
+        "kind": "curriculum",
+        "audience": "client-safe",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/85faf60e-ee5c-4f8c-b7d6-d16879100fe1",
+        "notes": "Delivery material"
+      },
+      {
+        "title": "The Offering Map",
+        "kind": "strategy",
+        "audience": "internal",
+        "area": "consulting",
+        "link": "https://claude.ai/code/artifact/d1094121-cd04-4ae1-b2d3-ab99be088102",
+        "notes": "Vision, how it all connects"
+      }
+    ]
   }
 }
