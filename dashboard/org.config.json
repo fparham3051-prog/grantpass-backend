@@ -34,7 +34,7 @@
     "freeCheckup": "https://franklyinspired.associates/tools"
   },
   "modules": {
-    "_about": "Turn whole areas on or off (also in Settings > Areas). consulting/institutionalos/marketScan/donorAnalysis/myDesk fit a consulting practice; grantmaking (giving grants), fundraising (donors and gifts), and governance (board meetings, minutes, conflict-of-interest statements, Form 990 checklist, policies) are the foundation areas. See docs/NEW-ORGANIZATION.md.",
+    "_about": "Turn whole areas on or off (also in Settings > Areas). consulting/institutionalos/marketScan/donorAnalysis/myDesk fit a consulting practice; grantmaking (giving grants), fundraising (donors and gifts), and governance (board meetings, minutes, conflict-of-interest statements, Form 990 checklist, policies) are the foundation areas. See docs/NEW-ORGANIZATION.md. ai turns on AI assistance (lead briefs, drafts for approval, document first passes, summaries); every AI-written message still waits for approval.",
     "consulting": true,
     "institutionalos": true,
     "marketScan": true,
@@ -44,7 +44,8 @@
     "myDesk": true,
     "grantmaking": true,
     "fundraising": true,
-    "governance": true
+    "governance": true,
+    "ai": true
   },
   "offers": [
     {
@@ -138,7 +139,7 @@
   "engagement": {
     "_about": "Standard terms for the engagement letter the operations app prints from a pipeline record (Pipeline > Letter). Plain language; have counsel review before first use.",
     "payment": "Invoices are due within 15 days. The Diagnostic is invoiced in full at signing. Retainers are invoiced at the start of each month.",
-    "confidentiality": "Everything you share stays confidential. With your written permission only, results may be shared with a funder you name, or used as an anonymous example.",
+    "confidentiality": "Everything you share stays confidential. With your written permission only, results may be shared with a funder you name, or used as an anonymous example. We use AI tools (Anthropic's Claude) to help prepare analysis and drafts from documents you share; a person reviews everything, and the documents aren't used to train AI models.",
     "data": "Your scores and documents are kept for the engagement and three years after it ends, then deleted unless you ask us to keep them.",
     "ending": "Either side can end the engagement with 14 days' written notice. You pay for work done up to that date.",
     "signature": "To accept, sign below or reply to the email this letter came with saying you accept."
