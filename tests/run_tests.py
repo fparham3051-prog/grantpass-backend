@@ -79,6 +79,22 @@ def portal():
     st, d = call("POST", f"/orgs/{S['org']}/portal", {}, S["token"])
     assert st == 200, (st, d)
 t("portal: client portal link can be created", portal)
+def evidence():
+    st, d = call("POST", f"/orgs/{S['org']}/dimensions", {"scores": {"strategy": 70}, "evidence": {"strategy": {"note": "Board-approved plan", "source": "https://example.org/plan"}}}, S["token"])
+    assert st == 200, (st, d)
+    st, d = call("POST", f"/orgs/{S['org']}/plan/reviews", {"kind": "weekly", "reviewDate": time.strftime("%Y-%m-%d"), "evidenceAdded": "Reserve policy draft"}, S["token"])
+    assert st == 200, (st, d)
+    st, link = call("POST", f"/orgs/{S['org']}/client-link", {}, S["token"])
+    assert st == 200 and link.get("clientToken"), (st, link)
+    st, p = call("GET", "/public/portal/" + link["clientToken"])
+    assert st == 200 and p["evidence"]["dimensions"]["strategy"]["source"] == "https://example.org/plan", p.get("evidence")
+    assert any(x["text"] == "Reserve policy draft" for x in p["evidence"]["log"]), p["evidence"]["log"]
+    st, sh = call("POST", f"/orgs/{S['org']}/share", {}, S["token"])
+    tok = sh.get("token") or sh.get("shareToken") or sh.get("share_token")
+    if tok:
+        st, r = call("GET", "/public/report/" + tok)
+        assert "evidence" not in r, "funder share link must not include evidence notes"
+t("portal: evidence on file and the evidence log reach the client portal only", evidence)
 def sso():
     st, d = call("POST", "/integration/session", {}, headers={"X-Integration-Key": "wrong"})
     assert st == 401, (st, d)

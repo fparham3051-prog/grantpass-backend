@@ -161,6 +161,15 @@ footer { color: var(--muted); font-size: 13px; text-align: center; padding: 18px
   .ring span { background: #fff; color: var(--navy); }
   .card { break-inside: avoid; box-shadow: none; }
 }
+.ev-row{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:16px;padding:14px 0;border-top:1px solid #e5e8ec}
+.ev-row:first-of-type{border-top:0}
+.ev-dim b{display:block;font-size:.95rem}.ev-dim small{color:#6b7480}
+.ev-body p{margin:.35rem 0}.ev-body a{font-size:.9rem}
+.ev-tag{display:inline-block;font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:999px}
+.ev-ok{background:#e5f4e4;color:#1e6b2c}.ev-note{background:#f9eeda;color:#7a5410}.ev-none{background:#fbebeb;color:#9b2c2c}
+.ev-log{list-style:none;padding:0;margin:0}.ev-log li{padding:8px 0;border-top:1px solid #e5e8ec}.ev-log li:first-child{border-top:0}
+@media (max-width:600px){.ev-row{grid-template-columns:1fr;gap:4px}}
+.demo-bar{background:#f9eeda;color:#5c3f0b;text-align:center;font-size:.9rem;padding:10px 16px;border-bottom:1px solid #ecd9b0}.demo-bar a{color:#5c3f0b;font-weight:600}
 </style>
 </head>
 <body>
@@ -206,8 +215,10 @@ const r0 = (n) => Math.round(Number(n) || 0);
 const fmtDate = (d) => new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
 let API_BASE = '';
+const DEMO_MODE = () => new URLSearchParams(location.search).get('demo') === 'sample';
 let PORTAL_TOKEN = '';
 async function fetchReport(token, client) {
+  if (DEMO_MODE()) { const r = await fetch('sample-portal.json', { cache: 'no-store' }); if (!r.ok) throw new Error('The sample workspace isn\u2019t available right now.'); return r.json(); }
   const params = new URLSearchParams(location.search);
   const bases = [params.get('api'), PRIMARY_API, FALLBACK_API]
     .filter((b) => b && /^(https:\/\/[\w.-]+|http:\/\/(localhost|127\.0\.0\.1))(:\d+)?$/.test(b.replace(/\/+$/, '')))
@@ -288,6 +299,24 @@ function constraintHtml(r) {
     <p style="margin:0">This is the dimension most likely to limit everything else right now. The 90-day target is a realistic next step: closing a quarter of the remaining gap with evidence you can show a funder or board.</p>
     ${low.note && !/neutral default|manually entered/i.test(low.note) ? `<p class="muted" style="margin:10px 0 0">${esc(low.note)}</p>` : ''}
   </section>`;
+}
+
+// Evidence on file: what backs each score, verified when a source is
+// attached, plus the dated log of evidence the plan has produced.
+function evidenceHtml(ev, r) {
+  if (!ev) return '';
+  const dims = (r && r.dimensions) || [];
+  const rows = dims.map((d) => {
+    const e = ev.dimensions[DIM_KEYS[d.name]] || null;
+    const src = e && /^https:\/\//.test(e.source || '') ? e.source : '';
+    const tag = !e || !e.note ? '<span class="ev-tag ev-none">No evidence on file</span>' : src ? '<span class="ev-tag ev-ok">Verified, source attached</span>' : '<span class="ev-tag ev-note">Noted</span>';
+    return `<div class="ev-row"><div class="ev-dim"><b>${esc(d.name)}</b><small>${/neutral default/i.test(d.note || '') ? 'Not yet scored' : 'Score ' + r0(d.score)}</small></div>
+      <div class="ev-body">${tag}${e && e.note ? `<p>${esc(e.note)}</p>` : '<p class="muted">Until evidence is on file, this score rests on assumptions.</p>'}${src ? `<a href="${esc(src)}" target="_blank" rel="noopener">Open the source</a>` : ''}</div></div>`;
+  }).join('');
+  const log = (ev.log || []).map((x) => `<li><span class="muted">${x.date ? fmtDate(x.date) : ''}</span> ${esc(x.text)} <small class="muted">${esc(x.from)}</small></li>`).join('');
+  const onFile = dims.filter((d) => { const e = ev.dimensions[DIM_KEYS[d.name]]; return e && e.note; }).length;
+  return `<section class="card"><h2>Evidence on file</h2><p class="lead">Claims can't outrun evidence: each score is backed by what's on file. ${onFile} of ${dims.length} areas have evidence${ev.updatedAt ? ', last updated ' + fmtDate(ev.updatedAt) : ''}.</p>${rows}</section>` +
+    (log ? `<section class="card"><h2>Evidence log</h2><p class="lead">What the 90-day plan has produced, newest first.</p><ul class="ev-log">${log}</ul></section>` : '');
 }
 
 function dimsHtml(r) {
@@ -510,7 +539,12 @@ function planHtml(p) {
     ${recent ? `<h3 style="margin-top:18px">Recent check-ins</h3>${recent}` : ''}
   </section>`;
 }
+// Sample workspace (report.html?demo=sample): a fictional organization
+// loaded from sample-portal.json for the website's product tour. Nothing
+// is sent to the server and nothing is saved.
+const DEMO = new URLSearchParams(location.search).get('demo') === 'sample';
 async function portalPost(path, body) {
+  if (DEMO) throw new Error('This is a sample workspace, so changes aren\u2019t saved. In your own portal, this goes straight to Franklin.');
   const res = await fetch(API_BASE + '/public/portal/' + encodeURIComponent(PORTAL_TOKEN) + path, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
@@ -614,7 +648,7 @@ function nextHtml() {
 async function load() {
   const app = document.getElementById('app');
   const params = new URLSearchParams(location.search);
-  const client = params.get('client');
+  const client = params.get('demo') === 'sample' ? 'sample' : params.get('client');
   const token = client || params.get('token');
   if (!token) {
     app.innerHTML = '<div class="wrap state"><h1>Report link needed</h1><p class="muted">Open the private link Franklin sent you. If you can’t find it, email <a href="mailto:franklin@franklyinspired.associates">franklin@franklyinspired.associates</a>.</p></div>';
@@ -622,7 +656,7 @@ async function load() {
   }
   try {
     const d = await fetchReport(token, !!client);
-    document.title = d.org.name + (client ? ' | Client Portal' : ' | InstitutionalOS Report');
+    document.title = d.org.name + (DEMO_MODE() ? ' | Sample Workspace' : client ? ' | Client Portal' : ' | InstitutionalOS Report');
     PORTAL_TOKEN = client || '';
     ORG_NAME = d.org.name;
     if (client) {
@@ -633,10 +667,10 @@ async function load() {
         health: dimsHtml(R) + selfVsHtml(d.portal, R) + historyHtml(d.history) + sealHtml(R.candidSeal),
         priority: constraintHtml(R) + recordHtml(d.portal),
         plan: planHtml(d.portal) + updatesHtml(d.updates),
-        evidence: docs + closeoutHtml(d.portal) + outcomesHtml(d.outcomes) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability),
+        evidence: evidenceHtml(d.evidence, R) + docs + closeoutHtml(d.portal) + outcomesHtml(d.outcomes) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability),
       };
       const names = { home: 'Home', health: 'Health', priority: 'Priority', plan: '90-Day Plan', evidence: 'Evidence' };
-      app.innerHTML = heroHtml(d) + `<nav class="tabs no-print" aria-label="Portal sections"><div class="wrap" role="tablist">${Object.keys(names).map(k => `<button type="button" role="tab" id="tab-${k}" aria-controls="panel-${k}" data-tab="${k}">${names[k]}</button>`).join('')}</div></nav>` +
+      app.innerHTML = (DEMO_MODE() ? '<div class="demo-bar" role="note">Sample workspace: a fictional organization with sample data, so you can see how InstitutionalOS works. <a href="https://franklyinspired.associates/assessment">Start your own free check-up</a></div>' : '') + heroHtml(d) + `<nav class="tabs no-print" aria-label="Portal sections"><div class="wrap" role="tablist">${Object.keys(names).map(k => `<button type="button" role="tab" id="tab-${k}" aria-controls="panel-${k}" data-tab="${k}">${names[k]}</button>`).join('')}</div></nav>` +
         '<main><div class="wrap">' + Object.keys(panels).map(k => `<div class="tab-panel" role="tabpanel" id="panel-${k}" aria-labelledby="tab-${k}">${panels[k] || '<section class="card"><p class="muted" style="margin:0">Nothing here yet.</p></section>'}</div>`).join('') + '</div></main>';
       const show = (k, focus) => {
         if (!names[k]) k = 'home';

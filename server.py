@@ -2313,7 +2313,7 @@ class Handler(BaseHTTPRequestHandler):
             if day and r["overall"] is not None:
                 by_day[day] = round(float(r["overall"]), 1)
         history = [{"date": d, "overall": v} for d, v in sorted(by_day.items())][-24:]
-        updates, outcomes, portal = [], [], None
+        updates, outcomes, portal, evidence = [], [], None, None
         if client:
             conn2 = db.get_conn()
             updates = conn2.execute(
@@ -2324,6 +2324,22 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT funder_name, result, amount, logged_at FROM outcomes WHERE org_id=? ORDER BY logged_at DESC LIMIT 20",
                 (org_id,),
             ).fetchall()
+            # Evidence on file: what backs each scored dimension, plus a
+            # dated log of evidence added through check-ins and finished
+            # plan actions. Client-only: a funder share link doesn't get it.
+            ev_row = conn2.execute("SELECT evidence_json, updated_at FROM manual_dimensions WHERE org_id=?", (org_id,)).fetchone()
+            try:
+                ev_dims = json.loads(ev_row["evidence_json"] or "{}") if ev_row else {}
+            except Exception:
+                ev_dims = {}
+            ev_log = []
+            for r in conn2.execute("SELECT review_date, evidence_added FROM plan_reviews WHERE org_id=? AND COALESCE(evidence_added,'')<>'' ORDER BY review_date DESC LIMIT 30", (org_id,)).fetchall():
+                ev_log.append({"date": str(r["review_date"])[:10], "text": r["evidence_added"], "from": "Weekly check-in"})
+            for r in conn2.execute("SELECT title, done_evidence, completed_at, updated_at FROM plan_actions WHERE org_id=? AND status='done' AND COALESCE(done_evidence,'')<>''", (org_id,)).fetchall():
+                ev_log.append({"date": str(r["completed_at"] or r["updated_at"] or "")[:10], "text": r["done_evidence"], "from": "Plan action: " + r["title"]})
+            ev_log.sort(key=lambda x: x["date"], reverse=True)
+            evidence = {"dimensions": {k: {"note": str((v or {}).get("note") or "")[:600], "source": str((v or {}).get("source") or "")[:500]} for k, v in ev_dims.items() if isinstance(v, dict)},
+                        "updatedAt": str(ev_row["updated_at"])[:10] if ev_row else "", "log": ev_log[:40]}
             conn2.close()
             keys = org.keys()
             portal = {
@@ -2358,7 +2374,7 @@ class Handler(BaseHTTPRequestHandler):
             "donorSustainability": donor,
             "compliance": [dict(r) for r in compliance_rows],
             "history": history,
-            **({"updates": [dict(r) for r in updates], "outcomes": [dict(r) for r in outcomes], "portal": portal} if client else {}),
+            **({"updates": [dict(r) for r in updates], "outcomes": [dict(r) for r in outcomes], "portal": portal, "evidence": evidence} if client else {}),
         })
 
 def main():
