@@ -97,6 +97,25 @@ main { padding: 28px 0 10px; }
 .tabs button:focus-visible { outline: 2px solid var(--gold-access); outline-offset: -2px; }
 .tab-panel[hidden] { display: none; }
 @media print { .tabs { display: none; } .tab-panel[hidden] { display: block !important; } }
+.table-wrap { overflow-x: auto; }
+.ba-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ba-table th, .ba-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #E2E6EA; vertical-align: top; }
+.ba-table thead th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.ba-table tbody th { font-weight: 600; }
+.ba-table td.chg.up { color: #1E6B45; font-weight: 700; } .ba-table td.chg.down { color: #B3402C; font-weight: 700; }
+.board-doc { background: #fff; color: var(--navy); padding: 24px 0 48px; }
+.board-doc .wrap { max-width: 820px; }
+.board-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.board-head h1 { font-family: var(--font-heading); margin: 4px 0; font-size: 30px; }
+.board-sec { border-top: 2px solid var(--navy); padding-top: 10px; margin-top: 22px; break-inside: avoid; }
+.board-sec h2 { font-size: 17px; margin: 0 0 8px; }
+.board-sec ul { margin: 0; padding-left: 20px; } .board-sec li { margin: 4px 0; }
+.board-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 10px; }
+.board-kpis div { border: 1px solid #E2E6EA; border-radius: 8px; padding: 10px 12px; }
+.board-kpis strong { display: block; font-family: var(--font-heading); font-size: 26px; }
+.board-kpis span { font-size: 12.5px; color: var(--muted); }
+.board-foot { margin-top: 26px; font-size: 12px; }
+@media print { .board-doc { padding: 0; } .board-head h1 { font-size: 24px; } .board-sec { margin-top: 14px; } body { font-size: 12px; } }
 .context dl { display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
 .context dt { font-weight: 600; color: var(--navy); }
 .context dd { margin: 0; }
@@ -371,6 +390,98 @@ function historyHtml(history) {
       <text x="${W - P}" y="${H - 6}" font-size="11" fill="#55606B" text-anchor="end">${esc(fmtDate(last.date))}</text>
     </svg>
   </section>`;
+}
+
+// Before and after: the score at the Diagnostic next to today's, per dimension.
+function comparisonHtml(c) {
+  if (!c || !c.dimensions || !c.dimensions.length) return '';
+  const sign = (n) => (n > 0 ? '+' : '') + r0(n);
+  const cls = (n) => (n >= 1 ? 'up' : n <= -1 ? 'down' : '');
+  const rows = c.dimensions.map((x) => `<tr><th scope="row">${esc(x.name)}</th><td>${r0(x.before)}</td><td>${r0(x.after)}</td><td class="chg ${cls(x.change)}">${sign(r0(x.after) - r0(x.before))}</td></tr>`).join('');
+  return `<section class="card" id="before-after">
+    <h2>Before and after</h2>
+    <p class="lead">${esc(c.baselineLabel)} (${esc(fmtDate(c.baselineDate))}) compared with today.${c.overallChange !== null ? ` Overall: ${r0(c.overallBefore)} &rarr; ${r0(c.overallAfter)} (${sign(r0(c.overallAfter) - r0(c.overallBefore))}).` : ''}</p>
+    <div class="table-wrap"><table class="ba-table">
+      <thead><tr><th scope="col">Dimension</th><th scope="col">Then</th><th scope="col">Now</th><th scope="col">Change</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <p class="muted" style="margin:10px 0 0">Scores move only when there's evidence to show for it, so a small gain here is a real one.</p>
+  </section>`;
+}
+
+// A card that opens the board report.
+function boardLinkHtml() {
+  const q = new URLSearchParams(location.search); q.set('view', 'board');
+  return `<section class="card no-print"><h2>For your board</h2><p>A two-page report your board can read before the meeting: where you stand, what changed, the plan's progress, and the decisions ahead.</p><a class="btn btn-ghost" href="?${esc(q.toString())}">Open the board report</a></section>`;
+}
+
+// The board report: one printable document built from the same data.
+function boardHtml(d) {
+  const R = d.readiness || {}, p = d.portal || {}, imp = p.improvement || {}, st = imp.status || {}, plan = imp.plan || {};
+  const rec = p.record || {}, c = p.comparison, acts = imp.actions || [], revs = imp.reviews || [];
+  const dims = (R.dimensions || []).slice();
+  const scored = dims.filter((x) => !/neutral default/i.test(x.note || ''));
+  const low = (scored.length ? scored : dims).slice().sort((a, b) => a.score - b.score)[0];
+  const band = R.decisionBand || {};
+  const today = new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+  const sign = (n) => (n > 0 ? '+' : '') + r0(n);
+  const decisions = [];
+  acts.filter((a) => a.status === 'blocked').forEach((a) => decisions.push('Unblock: ' + a.title + (a.owner ? ' (' + a.owner + ')' : '') + (a.note ? '. ' + a.note : '')));
+  revs.filter((r) => r.decisionNeeded).slice(0, 3).forEach((r) => decisions.push(r.decisionNeeded + ' (raised ' + fmtDate(r.reviewDate) + ')'));
+  const ev = ((d.evidence || {}).log || []);
+  const coming = [];
+  if (st.review90On && !st.review90Done) coming.push(['90-day review', st.review90On]);
+  if (st.reassessOn && !st.reassessDone) coming.push(['Six-month reassessment', st.reassessOn]);
+  if (p.nextSessionAt) coming.push(['Next session with Frankly Inspired', String(p.nextSessionAt).slice(0, 10)]);
+  const STL = { done: 'Done', in_progress: 'In progress', blocked: 'Blocked', not_started: 'Not started' };
+  return `<div class="board-doc"><div class="wrap">
+    <div class="board-bar no-print"><a href="?${esc((() => { const q = new URLSearchParams(location.search); q.delete('view'); return q.toString(); })())}">&larr; Back to the portal</a><button class="btn" type="button" onclick="window.print()">Print or save PDF</button></div>
+    <header class="board-head">
+      <p class="eyebrow" style="color:var(--gold-access)">Board report &middot; InstitutionalOS</p>
+      <h1>${esc(d.org.name)}</h1>
+      <p class="muted">Prepared ${esc(today)} by Frankly Inspired and Associates. ${STAGE_NAMES[R.stage] ? esc(STAGE_NAMES[R.stage]) + ' stage.' : ''}</p>
+    </header>
+
+    <section class="board-sec"><h2>1. Where we stand</h2>
+      <div class="board-kpis">
+        <div><strong>${r0(R.overall)}</strong><span>Overall score out of 100</span></div>
+        ${c && c.overallChange !== null ? `<div><strong>${sign(r0(c.overallAfter) - r0(c.overallBefore))}</strong><span>Change since ${esc(fmtDate(c.baselineDate))}</span></div>` : ''}
+        ${st.actionsTotal ? `<div><strong>${st.actionsDone} of ${st.actionsTotal}</strong><span>Plan actions done</span></div>` : ''}
+        <div><strong>${ev.length}</strong><span>Pieces of evidence added</span></div>
+      </div>
+      <p>${esc(R.status || '')}${band.decision ? '. Recommended posture: <strong>' + esc(band.decision) + '</strong>.' : '.'}</p>
+    </section>
+
+    <section class="board-sec"><h2>2. The binding constraint</h2>
+      ${low ? `<p><strong>${esc(low.name)}</strong>: ${r0(low.score)} now, target ${r0(low.liftTarget)} in 90 days.</p>` : ''}
+      ${rec.presentingProblem ? `<p><strong>What leadership first named:</strong> ${esc(rec.presentingProblem)}</p>` : ''}
+      ${rec.verifiedConstraint ? `<p><strong>What the evidence showed:</strong> ${esc(rec.verifiedConstraint)}</p>` : ''}
+      ${rec.nextInLine ? `<p><strong>Next in line:</strong> ${esc(rec.nextInLine)}</p>` : ''}
+    </section>
+
+    ${c && c.dimensions && c.dimensions.length ? `<section class="board-sec"><h2>3. Before and after</h2>
+      <table class="ba-table"><thead><tr><th scope="col">Dimension</th><th scope="col">${esc(fmtDate(c.baselineDate))}</th><th scope="col">Today</th><th scope="col">Change</th></tr></thead>
+      <tbody>${c.dimensions.map((x) => `<tr><th scope="row">${esc(x.name)}</th><td>${r0(x.before)}</td><td>${r0(x.after)}</td><td>${sign(r0(x.after) - r0(x.before))}</td></tr>`).join('')}</tbody></table>
+    </section>` : `<section class="board-sec"><h2>3. Scores by dimension</h2>
+      <table class="ba-table"><thead><tr><th scope="col">Dimension</th><th scope="col">Score</th></tr></thead><tbody>${dims.map((x) => `<tr><th scope="row">${esc(x.name)}</th><td>${r0(x.score)}</td></tr>`).join('')}</tbody></table>
+    </section>`}
+
+    <section class="board-sec"><h2>4. The 90-day plan</h2>
+      ${plan.target ? `<p><strong>Target:</strong> ${esc(plan.target)}${plan.baseline ? `<br><strong>Starting point:</strong> ${esc(plan.baseline)}` : ''}</p>` : ''}
+      ${acts.length ? `<table class="ba-table"><thead><tr><th scope="col">Action</th><th scope="col">Owner</th><th scope="col">Due</th><th scope="col">Status</th></tr></thead>
+        <tbody>${acts.map((a) => `<tr><th scope="row">${esc(a.title)}</th><td>${esc(a.owner)}</td><td>${a.dueDate ? esc(fmtDate(a.dueDate)) : ''}</td><td>${esc(STL[a.status] || a.status)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">The plan is set at the Diagnostic readout.</p>'}
+    </section>
+
+    <section class="board-sec"><h2>5. Decisions the board may need to weigh in on</h2>
+      ${decisions.length ? '<ul>' + decisions.map((x) => `<li>${esc(x)}</li>`).join('') + '</ul>' : '<p>None raised in recent check-ins.</p>'}
+    </section>
+
+    ${ev.length ? `<section class="board-sec"><h2>6. Recent evidence</h2><ul>${ev.slice(0, 5).map((x) => `<li>${esc(fmtDate(x.date))}: ${esc(x.text)}</li>`).join('')}</ul></section>` : ''}
+
+    ${coming.length ? `<section class="board-sec"><h2>${ev.length ? '7' : '6'}. Coming up</h2><ul>${coming.map((x) => `<li><strong>${esc(x[0])}:</strong> ${esc(fmtDate(x[1]))}</li>`).join('')}</ul></section>` : ''}
+
+    <p class="muted board-foot">Scores use the InstitutionalOS evidence rubric: a score rises only when there is evidence to show for it. Methodology: franklyinspired.associates/methodology</p>
+  </div></div>`;
 }
 
 function sealHtml(s) {
@@ -659,12 +770,17 @@ async function load() {
     document.title = d.org.name + (DEMO_MODE() ? ' | Sample Workspace' : client ? ' | Client Portal' : ' | InstitutionalOS Report');
     PORTAL_TOKEN = client || '';
     ORG_NAME = d.org.name;
+    if (client && params.get('view') === 'board') {
+      document.title = d.org.name + ' | Board Report';
+      app.innerHTML = (DEMO_MODE() ? '<div class="demo-bar no-print" role="note">Sample workspace: a fictional organization with sample data.</div>' : '') + boardHtml(d);
+      return;
+    }
     if (client) {
       const R = d.readiness || {};
       const docs = d.portal && d.portal.documentsUrl ? `<section class="card"><h2>Your documents</h2><p>Plans, memos, and working files we share, in one folder.</p><a class="btn btn-ghost" href="${esc(d.portal.documentsUrl)}" target="_blank" rel="noopener">Open your folder</a></section>` : '';
       const panels = {
-        home: nextActionHtml(d.portal) + contextHtml(d.portal) + sessionHtml(d.portal) + nextHtml(),
-        health: dimsHtml(R) + selfVsHtml(d.portal, R) + historyHtml(d.history) + sealHtml(R.candidSeal),
+        home: nextActionHtml(d.portal) + contextHtml(d.portal) + sessionHtml(d.portal) + boardLinkHtml() + nextHtml(),
+        health: comparisonHtml((d.portal || {}).comparison) + dimsHtml(R) + selfVsHtml(d.portal, R) + historyHtml(d.history) + sealHtml(R.candidSeal) + boardLinkHtml(),
         priority: constraintHtml(R) + recordHtml(d.portal),
         plan: planHtml(d.portal) + updatesHtml(d.updates),
         evidence: evidenceHtml(d.evidence, R) + docs + closeoutHtml(d.portal) + outcomesHtml(d.outcomes) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability),

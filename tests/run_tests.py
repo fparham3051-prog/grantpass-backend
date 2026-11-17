@@ -95,6 +95,20 @@ def evidence():
         st, r = call("GET", "/public/report/" + tok)
         assert "evidence" not in r, "funder share link must not include evidence notes"
 t("portal: evidence on file and the evidence log reach the client portal only", evidence)
+def comparison():
+    # A baseline score saved before the plan started, then today's score is higher.
+    c = psycopg2.connect(DB); c.autocommit = True; cur = c.cursor()
+    dims = json.dumps({"dimensions": [{"name": "Strategy and Positioning", "score": 40}]})
+    cur.execute("UPDATE readiness_scores SET computed_at = '2000-01-01T00:00:00' WHERE org_id = %s", (S["org"],))
+    cur.execute("INSERT INTO readiness_scores (org_id, overall, status, dimensions_json, stage, computed_at) VALUES (%s, 40, 'x', %s, 'FUND', '2000-01-02T00:00:00')", (S["org"], dims))
+    c.close()
+    st, link = call("POST", f"/orgs/{S['org']}/client-link", {}, S["token"])
+    st, p = call("GET", "/public/portal/" + link["clientToken"])
+    cmp = p["portal"]["comparison"]
+    assert cmp and cmp["baselineDate"] == "2000-01-02", cmp
+    row = [x for x in cmp["dimensions"] if x["name"] == "Strategy and Positioning"][0]
+    assert row["before"] == 40 and row["after"] == 70 and row["change"] == 30, row
+t("portal: before-and-after compares the Diagnostic baseline with today", comparison)
 def sso():
     st, d = call("POST", "/integration/session", {}, headers={"X-Integration-Key": "wrong"})
     assert st == 401, (st, d)

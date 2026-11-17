@@ -258,6 +258,46 @@ def plan_bundle(conn, org):
     return {"plan": plan, "actions": actions, "reviews": reviews, "status": status}
 
 
+def score_comparison(conn, org_id, readiness, start):
+    """Before and after: the score at the Diagnostic (the last saved score on
+    or before the plan's start date, or the first one ever saved) next to the
+    current score, overall and for each dimension. None until there is a
+    saved baseline from an earlier day."""
+    rows = conn.execute("SELECT overall, dimensions_json, computed_at FROM readiness_scores WHERE org_id=? ORDER BY computed_at ASC", (org_id,)).fetchall()
+    if not rows or not readiness:
+        return None
+    base = None
+    if start:
+        for r in rows:
+            if str(r["computed_at"])[:10] <= start:
+                base = r
+    if base is None:
+        base = rows[0]
+    base_day = str(base["computed_at"])[:10]
+    if base_day >= _today():
+        return None
+    try:
+        dims = (json.loads(base["dimensions_json"] or "{}") or {}).get("dimensions") or []
+    except Exception:
+        dims = []
+    before = {d.get("name"): d.get("score") for d in dims if isinstance(d, dict)}
+    changes = []
+    for d in readiness.get("dimensions") or []:
+        b = before.get(d["name"])
+        if b is None:
+            continue
+        changes.append({"name": d["name"], "before": round(float(b), 1), "after": round(float(d["score"]), 1), "change": round(float(d["score"]) - float(b), 1)})
+    ob = base["overall"]
+    return {
+        "baselineDate": base_day, "baselineLabel": "At the Diagnostic" if start and base_day <= start else "First score on file",
+        "currentDate": _today(),
+        "overallBefore": round(float(ob), 1) if ob is not None else None,
+        "overallAfter": round(float(readiness.get("overall") or 0), 1),
+        "overallChange": round(float(readiness.get("overall") or 0) - float(ob), 1) if ob is not None else None,
+        "dimensions": changes,
+    }
+
+
 def _insert_snapshot(conn, org_id, data):
     conn.execute(
         """INSERT INTO financial_snapshots
@@ -2357,6 +2397,7 @@ class Handler(BaseHTTPRequestHandler):
                 portal["selfScores"] = {}
             conn3 = db.get_conn()
             portal["improvement"] = plan_bundle(conn3, org)
+            portal["comparison"] = score_comparison(conn3, org_id, readiness, ((portal["improvement"] or {}).get("plan") or {}).get("startDate") or "")
             pv = perception_summary(conn3, org_id)
             portal["perception"] = {k: pv[k] for k in ("respondents", "byRole", "dimensions")}
             conn3.close()
