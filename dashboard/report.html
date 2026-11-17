@@ -115,7 +115,7 @@ main { padding: 28px 0 10px; }
 .board-kpis strong { display: block; font-family: var(--font-heading); font-size: 26px; }
 .board-kpis span { font-size: 12.5px; color: var(--muted); }
 .board-foot { margin-top: 26px; font-size: 12px; }
-@media print { .board-doc { padding: 0; } .board-head h1 { font-size: 24px; } .board-sec { margin-top: 14px; } body { font-size: 12px; } }
+@media print { body.board-view > footer, body.board-view .site-header { display: none !important; } .board-doc { padding: 0; } .board-head h1 { font-size: 24px; } .board-sec { margin-top: 14px; } body { font-size: 12px; } }
 .context dl { display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
 .context dt { font-weight: 600; color: var(--navy); }
 .context dd { margin: 0; }
@@ -772,6 +772,7 @@ async function load() {
     ORG_NAME = d.org.name;
     if (client && params.get('view') === 'board') {
       document.title = d.org.name + ' | Board Report';
+      document.body.classList.add('board-view');
       app.innerHTML = (DEMO_MODE() ? '<div class="demo-bar no-print" role="note">Sample workspace: a fictional organization with sample data.</div>' : '') + boardHtml(d);
       return;
     }
