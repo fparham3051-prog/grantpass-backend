@@ -104,8 +104,18 @@ def org_summary(conn, org_id):
         "nextSessionAt": org["next_session_at"] or "",
         "nextSessionNote": org["next_session_note"] or "",
         "plan": _plan_for_fios(conn, org),
+        "comparison": _comparison_for_fios(conn, org, r),
         "perception": {k: v for k, v in perception_summary(conn, org_id).items() if k in ("respondents", "byRole", "dimensions")},
     }
+
+
+def _comparison_for_fios(conn, org, readiness):
+    """Before and after scores for the outcomes report in FIOS (None until there is an earlier baseline)."""
+    try:
+        start = (plan_bundle(conn, org)["plan"] or {}).get("startDate") or ""
+        return score_comparison(conn, org["id"], readiness, start)
+    except Exception:  # noqa: BLE001 - the summary must still go out
+        return None
 
 
 def _plan_for_fios(conn, org):
