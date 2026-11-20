@@ -147,6 +147,13 @@ def growth_progress():
     st, c = call("GET", "/growth/catalog")
     assert st == 200 and len(c["stages"]) == 5 and any(x["key"] == "development_director" for x in c["seats"]), st
 t("growth: re-assessment shows progress against the baseline", growth_progress)
+def case_study():
+    st, d = call("GET", f"/orgs/{S['org']}/case-study", token=S["token"])
+    assert st == 200 and d["markdown"].startswith("# Case study: Test Youth Alliance"), (st, d)
+    assert "Stage Readiness Score:" in d["markdown"] and d["hasGrowthMovement"], d["markdown"]
+    assert "[Quote from the 90-day results interview.]" in d["markdown"]
+    assert call("GET", f"/orgs/{S['org']}/case-study")[0] == 401
+t("case study: a draft from scores, growth movement and the plan", case_study)
 def backup():
     st, d = call("GET", "/integration/backup", headers={"X-Integration-Key": "ik-test"})
     assert st == 200 and "organizations" in d["tables"] and len(d["tables"]["organizations"]) == 1, (st, list(d.get("tables", {}))[:5])

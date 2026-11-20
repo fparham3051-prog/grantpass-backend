@@ -133,6 +133,54 @@ def growth_for(conn, org_id):
     return result
 
 
+def case_study(conn, org):
+    """A first draft of a client case study, in Markdown, from what the
+    system already holds: the starting and current scores, the Growth
+    Pathway's movement, the constraint, and the 90-day plan's results.
+    Bracketed parts are for Franklin and the client to fill in; nothing is
+    published without the client's written approval."""
+    org_id = org["id"]
+    readiness = score_org(conn, org_id) or {}
+    bundle = plan_bundle(conn, org)
+    plan, st, record = bundle.get("plan") or {}, bundle.get("status") or {}, _json(org["diagnostic_record"] or "", {})
+    cmp = score_comparison(conn, org_id, readiness, plan.get("startDate") or "")
+    g = growth_for(conn, org_id) or {}
+    name = org["name"]
+    lines = [f"# Case study: {name}", "", "*Draft from InstitutionalOS. Bracketed parts need filling in. Share only after {name} approves the final text in writing.*".format(name=name), ""]
+    lines += ["## The situation", ""]
+    lines.append(f"[One or two sentences: who {name} serves, its size, and the decision it faced.]")
+    if record.get("presentingProblem"):
+        lines.append(f"They came to us about: {record['presentingProblem']}.")
+    if record.get("verifiedConstraint"):
+        lines.append(f"What the Diagnostic found was holding them back: {record['verifiedConstraint']}.")
+    lines += ["", "## What we did", ""]
+    if g.get("stage"):
+        start = (g.get("baseline") or {})
+        lines.append(f"- Placed {name} at growth stage {start.get('stage', g['stage'])} and scored its readiness across structure, money, fundraising, board and compliance.")
+    lines.append("- Verified the evidence behind every score and named the constraint to fix first.")
+    if plan.get("target"):
+        lines.append(f"- Set a 90-day target: {plan['target']}.")
+    if st.get("actionsTotal"):
+        lines.append(f"- Worked a plan of {st['actionsTotal']} actions with the leadership team.")
+    lines += ["", "## Results", ""]
+    if cmp and cmp.get("overallChange") is not None:
+        lines.append(f"- Overall Health Index score: {cmp['overallBefore']:g} to {cmp['overallAfter']:g} ({cmp['overallChange']:+g}) since {cmp['baselineDate']}.")
+        best = sorted(cmp.get("dimensions") or [], key=lambda d: -d["change"])[:2]
+        for d in best:
+            if d["change"] > 0:
+                lines.append(f"- {d['name']}: {d['before']:g} to {d['after']:g} ({d['change']:+g}).")
+    if g.get("stage") and g.get("baseline") and len(g.get("history") or []) > 1:
+        b = g["baseline"]
+        lines.append(f"- Stage Readiness Score: {b['score']} to {g['score']} of 20 (stage {b['stage']} to stage {g['stage']}).")
+    if st.get("actionsTotal"):
+        lines.append(f"- {st.get('actionsDone', 0)} of {st['actionsTotal']} plan actions finished.")
+    lines.append("- [The one number they'd repeat: months of reserves, dollars raised against goal, a hire made and funded.]")
+    lines += ["", "## In their words", "", "> [Quote from the 90-day results interview.]", ">", "> [Name, title]", "",
+              "## What's next", "", f"[{name}'s next gate on the Growth Pathway" + (f": {g['nextHires'][0]['name']}" if g.get('nextHires') else "") + ".]", "",
+              "*Prepared by Frankly Inspired and Associates. Planning guidance, not legal or accounting advice.*"]
+    return {"markdown": "\n".join(lines), "hasComparison": bool(cmp), "hasGrowthMovement": bool(g.get("baseline") and len(g.get("history") or []) > 1)}
+
+
 def _growth_for_fios(conn, org_id):
     try:
         g = growth_for(conn, org_id)
@@ -653,6 +701,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._set_growth(int(m.group(1)))
             if m and method == "GET":
                 return self._get_growth(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/case-study$", path)
+            if m and method == "GET":
+                return self._get_case_study(int(m.group(1)))
             if path == "/growth/catalog" and method == "GET":
                 return json_response(self, 200, {"seats": growth.SEATS, "policies": growth.POLICY_LIST,
                                                  "stages": [{k: v for k, v in s.items() if k not in ("staff", "boardSize")} for s in growth.STAGES]})
@@ -1693,6 +1744,19 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         sync_to_fios(org_id)
         return json_response(self, 200, {"inputs": inputs, "growth": result})
+
+    def _get_case_study(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        out = case_study(conn, org)
+        conn.close()
+        return json_response(self, 200, out)
 
     def _get_growth(self, org_id):
         user_id = get_auth_user(self)
