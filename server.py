@@ -25,6 +25,7 @@ import parsing
 import scoring
 import candid_seal
 import os_sync
+import growth
 
 db.init_db()
 
@@ -106,6 +107,44 @@ def org_summary(conn, org_id):
         "plan": _plan_for_fios(conn, org),
         "comparison": _comparison_for_fios(conn, org, r),
         "perception": {k: v for k, v in perception_summary(conn, org_id).items() if k in ("respondents", "byRole", "dimensions")},
+        "growth": _growth_for_fios(conn, org_id),
+    }
+
+
+def growth_for(conn, org_id):
+    """The Growth Pathway assessment for an org: its saved inputs, the latest
+    filed financials to fill gaps, and the first and latest scores so stage
+    movement shows. None when nothing is known yet."""
+    row = conn.execute("SELECT inputs_json, updated_at FROM growth_profiles WHERE org_id=?", (org_id,)).fetchone()
+    inputs = _json(row["inputs_json"], {}) if row else {}
+    snap = conn.execute(
+        "SELECT * FROM financial_snapshots WHERE org_id=? ORDER BY ingested_at DESC LIMIT 1", (org_id,)
+    ).fetchone()
+    if not row and not snap:
+        return None
+    result = growth.assess(inputs, dict(snap) if snap else None)
+    hist = conn.execute(
+        "SELECT stage, score, computed_at FROM growth_history WHERE org_id=? ORDER BY computed_at ASC, id ASC", (org_id,)
+    ).fetchall()
+    result["history"] = [dict(h) for h in hist]
+    if hist:
+        result["baseline"] = {"stage": hist[0]["stage"], "score": hist[0]["score"], "at": hist[0]["computed_at"]}
+    result["updatedAt"] = row["updated_at"] if row else None
+    return result
+
+
+def _growth_for_fios(conn, org_id):
+    try:
+        g = growth_for(conn, org_id)
+    except Exception:  # noqa: BLE001 - the summary must still go out
+        return None
+    if not g or not g.get("stage"):
+        return None
+    return {k: g.get(k) for k in ("stage", "stageName", "score", "outOf", "band", "baseline", "nextStage")} | {
+        "pillars": [{"name": p["name"], "score": p["score"]} for p in g["pillars"]],
+        "nextHires": [h["name"] for h in g["nextHires"]],
+        "fundraising": g["fundraising"]["strategy"],
+        "boardGaps": g["board"]["gaps"][:5],
     }
 
 
@@ -608,6 +647,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._set_dimensions(int(m.group(1)))
             if m and method == "GET":
                 return self._get_dimensions(int(m.group(1)))
+
+            m = re.match(r"^/orgs/(\d+)/growth$", path)
+            if m and method == "POST":
+                return self._set_growth(int(m.group(1)))
+            if m and method == "GET":
+                return self._get_growth(int(m.group(1)))
+            if path == "/growth/catalog" and method == "GET":
+                return json_response(self, 200, {"seats": growth.SEATS, "policies": growth.POLICY_LIST,
+                                                 "stages": [{k: v for k, v in s.items() if k not in ("staff", "boardSize")} for s in growth.STAGES]})
 
             m = re.match(r"^/orgs/(\d+)/score$", path)
             if m and method == "GET":
@@ -1590,6 +1638,76 @@ class Handler(BaseHTTPRequestHandler):
             evidence = {}
         return json_response(self, 200, {"scores": scores, "evidence": evidence, "updatedAt": row["updated_at"]})
 
+    GROWTH_KEYS = {
+        "budget", "staff_fte", "reserve_months", "personnel_share", "largest_source_share",
+        "contributed_actual", "contributed_goal", "contributions", "donor_retention", "cost_per_dollar",
+        "fundraising_plan", "board_size", "board_giving_pct", "ed_evaluated", "ed_seat_count",
+        "filings_current", "audit_or_review_done", "employee_handbook", "indirect_rate_set",
+        "cost_allocation", "filled_seats", "policies",
+    }
+
+    def _set_growth(self, org_id):
+        """Save Growth Pathway inputs (all optional; a key sent as null is
+        cleared, a key left out keeps its saved value) and record the
+        resulting stage and score in the history. Body: {"inputs": {...}}."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        new = data.get("inputs") if isinstance(data.get("inputs"), dict) else {}
+        unknown = sorted(k for k in new if k not in self.GROWTH_KEYS)
+        if unknown:
+            return json_response(self, 400, {"error": "unknown inputs: " + ", ".join(unknown)})
+        for k in ("filled_seats", "policies"):
+            if k in new and new[k] is not None:
+                if not isinstance(new[k], list):
+                    return json_response(self, 400, {"error": k + " must be a list"})
+                valid = growth.SEAT_NAMES if k == "filled_seats" else growth.POLICY_NAMES
+                new[k] = [x for x in new[k] if x in valid]
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        row = conn.execute("SELECT inputs_json FROM growth_profiles WHERE org_id=?", (org_id,)).fetchone()
+        inputs = _json(row["inputs_json"], {}) if row else {}
+        for k, v in new.items():
+            if v is None:
+                inputs.pop(k, None)
+            else:
+                inputs[k] = v
+        conn.execute(
+            "INSERT INTO growth_profiles (org_id, inputs_json, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(org_id) DO UPDATE SET inputs_json=excluded.inputs_json, updated_at=excluded.updated_at",
+            (org_id, json.dumps(inputs), db.now()),
+        )
+        result = growth_for(conn, org_id) or {}
+        if result.get("stage"):
+            conn.execute(
+                "INSERT INTO growth_history (org_id, stage, score, pillars_json, computed_at) VALUES (?,?,?,?,?)",
+                (org_id, result["stage"], result["score"],
+                 json.dumps({p["key"]: p["score"] for p in result["pillars"]}), db.now()),
+            )
+            result = growth_for(conn, org_id)
+        conn.commit()
+        conn.close()
+        sync_to_fios(org_id)
+        return json_response(self, 200, {"inputs": inputs, "growth": result})
+
+    def _get_growth(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT id FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        row = conn.execute("SELECT inputs_json FROM growth_profiles WHERE org_id=?", (org_id,)).fetchone()
+        result = growth_for(conn, org_id)
+        conn.close()
+        return json_response(self, 200, {"inputs": _json(row["inputs_json"], {}) if row else {}, "growth": result})
+
     def _get_score(self, org_id):
         user_id = get_auth_user(self)
         if not user_id:
@@ -1719,10 +1837,14 @@ class Handler(BaseHTTPRequestHandler):
                 for r in rows
             ]
 
+        conn_g = db.get_conn()
+        growth_result = growth_for(conn_g, org_id)
+        conn_g.close()
         return json_response(self, 200, {
             "org": {"id": org["id"], "name": org["name"]},
             "readiness": readiness,
             "donorSustainability": donor,
+            "growth": growth_result,
         })
 
     def _add_report(self, org_id):
@@ -2410,6 +2532,10 @@ class Handler(BaseHTTPRequestHandler):
             portal["comparison"] = score_comparison(conn3, org_id, readiness, ((portal["improvement"] or {}).get("plan") or {}).get("startDate") or "")
             pv = perception_summary(conn3, org_id)
             portal["perception"] = {k: pv[k] for k in ("respondents", "byRole", "dimensions")}
+            try:
+                portal["growth"] = growth_for(conn3, org_id)
+            except Exception:  # noqa: BLE001 - the portal must still load
+                portal["growth"] = None
             conn3.close()
 
         donor = {"hasData": False, "responseCount": 0, "averageScore": None}
