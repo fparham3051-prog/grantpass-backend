@@ -273,6 +273,8 @@
         <h3>Growth Pathway</h3>
         <p class="hint">Which size stage this organization is in (1 Founder-led to 5 Very large), its Stage Readiness Score across five pillars (structure, money, fundraising, board, compliance), and what to do next. Leave anything you don't know blank: it scores 0 and is listed as missing. Budget, reserves, board size and three policies fill in from an ingested 990.</p>
         <div id="growthResult"><p class="muted">Loading...</p></div>
+        <div style="display:flex;gap:8px;align-items:center;margin:6px 0;"><button class="btn btn-ghost btn-sm" id="caseStudyBtn">Draft case study</button><span class="status-msg" id="caseStudyStatus" style="margin:0;"></span></div>
+        <textarea id="caseStudyText" class="hidden" rows="14" style="width:100%;font-family:inherit;font-size:12.5px;" aria-label="Case study draft"></textarea>
         <details id="growthForm" style="margin:8px 0 14px;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Update Growth Pathway inputs</summary>
           <div class="row" style="grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;">
             <div><label for="g_budget">Annual budget (expenses, $)</label><input id="g_budget" type="number" min="0"></div>
@@ -1998,6 +2000,20 @@ document.getElementById('createFunderBtn').addEventListener('click', async () =>
   show(panes[start] ? start : 'home');
   window.showDetailTab = show;
 })();
+
+
+document.getElementById('caseStudyBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('caseStudyStatus'), ta = document.getElementById('caseStudyText');
+  st.textContent = 'Drafting...';
+  try {
+    const d = await api('GET', '/orgs/' + selectedOrgId + '/case-study');
+    ta.value = d.markdown; ta.classList.remove('hidden');
+    try { await navigator.clipboard.writeText(d.markdown); st.textContent = 'Copied to your clipboard. Fill in the bracketed parts; share only with the client\u2019s written approval.'; }
+    catch (e) { st.textContent = 'Draft below. Fill in the bracketed parts; share only with the client\u2019s written approval.'; }
+    if (!d.hasComparison) st.textContent += ' No before-and-after score yet: rescore after the plan starts.';
+  } catch (e) { st.textContent = e.message; }
+});
 
 // ---------- Growth Pathway (growth.py) ----------
 const GROWTH_NUM = ['budget','staff_fte','ed_seat_count','reserve_months','personnel_share','largest_source_share','contributed_actual','contributed_goal','donor_retention','cost_per_dollar','board_size','board_giving_pct'];
