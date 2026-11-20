@@ -252,6 +252,23 @@ CREATE TABLE IF NOT EXISTS perception_responses (
     created_at TEXT NOT NULL
 );
 
+-- Growth Pathway inputs (growth.py), one row per org, plus a history of
+-- each assessment so stage movement can be shown over time.
+CREATE TABLE IF NOT EXISTS growth_profiles (
+    org_id INTEGER PRIMARY KEY REFERENCES organizations(id),
+    inputs_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS growth_history (
+    id SERIAL PRIMARY KEY,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    stage INTEGER,
+    score INTEGER,
+    pillars_json TEXT DEFAULT '{}',
+    computed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS funnel_events (
     id SERIAL PRIMARY KEY,
     event TEXT NOT NULL,

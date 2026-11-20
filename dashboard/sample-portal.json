@@ -437,6 +437,116 @@
      "change": 2
     }
    ]
+  },
+  "growth": {
+   "stage": 2,
+   "stageName": "Emerging",
+   "stageRange": "$250,000 to $1,000,000",
+   "nextStage": {
+    "stage": 3,
+    "name": "Established",
+    "at": 1000000
+   },
+   "score": 14,
+   "outOf": 20,
+   "band": "Strengthen before adding staff",
+   "pillars": [
+    {
+     "key": "structure",
+     "name": "Structure",
+     "score": 2,
+     "measures": "3 of 5 stage 2 seats filled; ED holds 5 seats",
+     "ready": false
+    },
+    {
+     "key": "money",
+     "name": "Money",
+     "score": 3,
+     "measures": "2.1 months of reserves; personnel 64% of expenses; largest source 38%",
+     "ready": true
+    },
+    {
+     "key": "fundraising",
+     "name": "Fundraising",
+     "score": 3,
+     "measures": "94% of contributed goal; retention 41%; $0.22 per dollar raised",
+     "ready": true
+    },
+    {
+     "key": "board",
+     "name": "Board",
+     "score": 2,
+     "measures": "8 members (stage 2 range 7 to 11); 88% give; 7 of 9 policies",
+     "ready": false
+    },
+    {
+     "key": "compliance",
+     "name": "Compliance",
+     "score": 4,
+     "measures": "",
+     "ready": true
+    }
+   ],
+   "nextHires": [
+    {
+     "seat": "operations_coordinator",
+     "name": "Operations / admin coordinator",
+     "salary": 48000,
+     "fte": 1,
+     "loadedCost": 60000,
+     "budgetRequired": 92308,
+     "reserveAdd": 15000
+    },
+    {
+     "seat": "program_staff",
+     "name": "Front-line program staff",
+     "salary": 42000,
+     "fte": 1,
+     "loadedCost": 52500,
+     "budgetRequired": 80769,
+     "reserveAdd": 13125
+    }
+   ],
+   "fundraising": {
+    "strategy": "Build the system: a grants calendar, two appeals a year, a second-gift program, mid-level donors, and the ED's first $10K+ asks",
+    "goal": "$650,000 this year",
+    "growthTarget": "20 to 30% a year"
+   },
+   "board": {
+    "type": "Moving to a governing board",
+    "size": "7 to 11",
+    "job": "Hires and evaluates the ED, approves the budget, adopts a strategic plan, opens doors to donors",
+    "gaps": [
+     "The next stage needs 11 to 15 members (governing board)",
+     "Get to 100% board giving",
+     "Adopt: Operating reserve policy",
+     "Adopt: Board member agreements with give-or-get"
+    ]
+   },
+   "complianceNext": [
+    "At 15 employees: Title VII and the ADA apply (now about 7)",
+    "Maryland: an independent audit is required once contributions reach $1 million"
+   ],
+   "missing": [],
+   "estimated": [],
+   "note": "Planning guidance, not legal or accounting advice. Salaries are DC, Maryland and Virginia planning figures.",
+   "history": [
+    {
+     "stage": 2,
+     "score": 10,
+     "computed_at": "2026-08-15T14:00:00"
+    },
+    {
+     "stage": 2,
+     "score": 14,
+     "computed_at": "2026-11-14T14:00:00"
+    }
+   ],
+   "baseline": {
+    "stage": 2,
+    "score": 10,
+    "at": "2026-08-15T14:00:00"
+   }
   }
  },
  "evidence": {

@@ -270,6 +270,30 @@
           <span class="status-msg" id="orgStageStatus" style="margin:0;"></span>
         </div>
 
+        <h3>Growth Pathway</h3>
+        <p class="hint">Which size stage this organization is in (1 Founder-led to 5 Very large), its Stage Readiness Score across five pillars (structure, money, fundraising, board, compliance), and what to do next. Leave anything you don't know blank: it scores 0 and is listed as missing. Budget, reserves, board size and three policies fill in from an ingested 990.</p>
+        <div id="growthResult"><p class="muted">Loading...</p></div>
+        <details id="growthForm" style="margin:8px 0 14px;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Update Growth Pathway inputs</summary>
+          <div class="row" style="grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;">
+            <div><label for="g_budget">Annual budget (expenses, $)</label><input id="g_budget" type="number" min="0"></div>
+            <div><label for="g_staff_fte">Staff (FTE)</label><input id="g_staff_fte" type="number" min="0" step="0.5"></div>
+            <div><label for="g_ed_seat_count">Seats the ED holds</label><input id="g_ed_seat_count" type="number" min="0"></div>
+            <div><label for="g_reserve_months">Months of operating reserves</label><input id="g_reserve_months" type="number" min="0" step="0.1"></div>
+            <div><label for="g_personnel_share">Personnel share of expenses (%)</label><input id="g_personnel_share" type="number" min="0" max="100"></div>
+            <div><label for="g_largest_source_share">Largest funding source (%)</label><input id="g_largest_source_share" type="number" min="0" max="100"></div>
+            <div><label for="g_contributed_actual">Contributed revenue this year ($)</label><input id="g_contributed_actual" type="number" min="0"></div>
+            <div><label for="g_contributed_goal">Contributed revenue goal ($)</label><input id="g_contributed_goal" type="number" min="0"></div>
+            <div><label for="g_donor_retention">Donor retention (%)</label><input id="g_donor_retention" type="number" min="0" max="100"></div>
+            <div><label for="g_cost_per_dollar">Cost per dollar raised ($)</label><input id="g_cost_per_dollar" type="number" min="0" step="0.01"></div>
+            <div><label for="g_board_size">Board size</label><input id="g_board_size" type="number" min="0"></div>
+            <div><label for="g_board_giving_pct">Board members who give (%)</label><input id="g_board_giving_pct" type="number" min="0" max="100"></div>
+          </div>
+          <div class="row" style="grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px;" id="growthYesNo"></div>
+          <div style="margin-top:10px;"><label>Seats filled</label><div id="growthSeats" style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;"></div></div>
+          <div style="margin-top:10px;"><label>Board policies adopted</label><div id="growthPolicies" style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;"></div></div>
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center;"><button class="btn btn-primary btn-sm" id="saveGrowthBtn">Save and re-score</button><span class="status-msg" id="growthStatus" style="margin:0;"></span></div>
+        </details>
+
         <h3>Full Report</h3>
         <p class="hint">Readiness score (financial + manual dimensions) alongside this org's most recent Donor Sustainability &amp; Stewardship Assessment, if they've taken it.</p>
         <div id="fullReportResult"><p class="muted">Loading...</p></div>
@@ -1253,6 +1277,7 @@ async function selectOrg(id) {
   document.getElementById('scoreResult').innerHTML = '';
 
   loadFullReport(id, org ? org.name : '');
+  loadGrowth(id);
   loadPlan(id);
   loadScoreHistory(id);
   loadDimensions(id);
@@ -1922,7 +1947,7 @@ document.getElementById('createFunderBtn').addEventListener('click', async () =>
   const TABS = [['home', 'Home'], ['health', 'Health'], ['priority', 'Priority'], ['plan', '90-Day Plan'], ['evidence', 'Evidence']];
   const BY_HEADING = {
     'Client Portal': 'home', 'Share With a Funder': 'home',
-    'Full Report': 'health', 'Score History': 'health', 'Financial Data': 'health', 'Dimension Scores': 'health',
+    'Growth Pathway': 'health', 'Full Report': 'health', 'Score History': 'health', 'Financial Data': 'health', 'Dimension Scores': 'health',
     'Diagnostic Record': 'priority',
     '90-Day Improvement Plan': 'plan', 'Outcome Reports': 'plan',
     'Evidence Vault': 'evidence', 'Compliance Calendar': 'evidence',
@@ -1973,6 +1998,70 @@ document.getElementById('createFunderBtn').addEventListener('click', async () =>
   show(panes[start] ? start : 'home');
   window.showDetailTab = show;
 })();
+
+// ---------- Growth Pathway (growth.py) ----------
+const GROWTH_NUM = ['budget','staff_fte','ed_seat_count','reserve_months','personnel_share','largest_source_share','contributed_actual','contributed_goal','donor_retention','cost_per_dollar','board_size','board_giving_pct'];
+const GROWTH_YN = [['fundraising_plan','Written fundraising plan'],['ed_evaluated','ED evaluated in writing this year'],['filings_current','990 and state registration current'],['audit_or_review_done','CPA audit or review done'],['employee_handbook','Employee handbook (needed at 15+ staff)'],['indirect_rate_set','Indirect rate or cost allocation set']];
+let growthCatalog = null;
+const gEsc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const gMoney = (n) => n == null ? 'check benchmarks' : '$' + Math.round(n).toLocaleString();
+
+function renderGrowth(g) {
+  if (!g || !g.stage) return '<p class="muted">' + gEsc((g && g.note) || 'No Growth Pathway data yet. Enter the annual budget below, or ingest a 990, to place this organization in a stage.') + '</p>';
+  const bandColor = g.score >= 16 ? '#1f7a4d' : g.score >= 10 ? '#9a6b00' : '#b3261e';
+  let h = '<div class="evidence-item" style="padding:14px;">';
+  h += `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;"><div><div class="ev-name" style="font-size:15px;">Stage ${g.stage}: ${gEsc(g.stageName)}</div><div class="muted" style="font-size:12px;">${gEsc(g.stageRange)}${g.nextStage ? ' &middot; next: ' + gEsc(g.nextStage.name) + ' at ' + gMoney(g.nextStage.at) : ''}</div></div>`;
+  h += `<div style="text-align:right;"><div style="font-size:22px;font-weight:800;color:${bandColor};">${g.score} / ${g.outOf}</div><div style="font-size:12px;font-weight:700;color:${bandColor};">${gEsc(g.band)}</div>`;
+  if (g.baseline && g.history && g.history.length > 1) { const d = g.score - g.baseline.score; h += `<div class="muted" style="font-size:11.5px;">${d >= 0 ? '+' : ''}${d} since baseline (stage ${g.baseline.stage}, ${g.baseline.score})</div>`; }
+  h += '</div></div>';
+  h += '<table style="width:100%;margin-top:10px;font-size:12.5px;border-collapse:collapse;">';
+  for (const p of g.pillars) h += `<tr><td style="padding:3px 0;font-weight:700;width:110px;">${gEsc(p.name)}</td><td style="width:90px;">${'&#9632;'.repeat(p.score)}${'&#9633;'.repeat(4 - p.score)} ${p.score}/4</td><td class="muted">${gEsc(p.measures)}${p.ready ? '' : ' &middot; <strong style="color:#9a6b00">not ready</strong>'}</td></tr>`;
+  h += '</table>';
+  h += '<div style="margin-top:10px;font-size:12.5px;"><strong>Next two hires</strong><ul style="margin:4px 0 0 18px;padding:0;">' + g.nextHires.map(x => `<li>${gEsc(x.name)}: ${x.salary == null ? 'check Candid benchmarks' : gMoney(x.loadedCost) + ' a year loaded, needs about ' + gMoney(x.budgetRequired) + ' of budget and ' + gMoney(x.reserveAdd) + ' more reserves'}</li>`).join('') + '</ul></div>';
+  h += `<div style="margin-top:8px;font-size:12.5px;"><strong>Fundraising move</strong> (goal ${gEsc(g.fundraising.goal)}; growth ${gEsc(g.fundraising.growthTarget)}): ${gEsc(g.fundraising.strategy)}</div>`;
+  h += `<div style="margin-top:8px;font-size:12.5px;"><strong>Board</strong> (${gEsc(g.board.type)}, ${gEsc(g.board.size)} members): ${gEsc(g.board.job)}${g.board.gaps.length ? '<ul style="margin:4px 0 0 18px;padding:0;">' + g.board.gaps.map(x => '<li>' + gEsc(x) + '</li>').join('') + '</ul>' : ''}</div>`;
+  if (g.complianceNext.length) h += '<div style="margin-top:8px;font-size:12.5px;"><strong>Next thresholds</strong><ul style="margin:4px 0 0 18px;padding:0;">' + g.complianceNext.map(x => '<li>' + gEsc(x) + '</li>').join('') + '</ul></div>';
+  if (g.missing.length) h += '<div class="muted" style="margin-top:8px;font-size:12px;"><strong>Missing (scored 0):</strong> ' + g.missing.map(gEsc).join('; ') + '</div>';
+  if (g.estimated && g.estimated.length) h += '<div class="muted" style="font-size:12px;">Estimated from the 990: ' + g.estimated.map(gEsc).join(', ') + ' (net assets overstate operating reserves; enter the real figure if you have it).</div>';
+  h += '<div class="muted" style="margin-top:6px;font-size:11.5px;">' + gEsc(g.note) + '</div></div>';
+  return h;
+}
+
+async function loadGrowth(id) {
+  const out = document.getElementById('growthResult');
+  out.innerHTML = '<p class="muted">Loading...</p>';
+  try {
+    if (!growthCatalog) growthCatalog = await api('GET', '/growth/catalog');
+    const d = await api('GET', '/orgs/' + id + '/growth');
+    if (selectedOrgId !== id) return;
+    out.innerHTML = renderGrowth(d.growth);
+    fillGrowthForm(d.inputs || {});
+  } catch (e) { out.innerHTML = '<p class="muted">' + gEsc(e.message) + '</p>'; }
+}
+
+function fillGrowthForm(inp) {
+  GROWTH_NUM.forEach(k => { document.getElementById('g_' + k).value = inp[k] ?? ''; });
+  document.getElementById('growthYesNo').innerHTML = GROWTH_YN.map(([k, label]) => `<div><label for="g_${k}">${gEsc(label)}</label><select id="g_${k}"><option value="">Not known</option><option value="yes"${inp[k] === true ? ' selected' : ''}>Yes</option><option value="no"${inp[k] === false ? ' selected' : ''}>No</option></select></div>`).join('');
+  const seats = new Set(inp.filled_seats || []), pols = new Set(inp.policies || []);
+  document.getElementById('growthSeats').innerHTML = growthCatalog.seats.map(x => `<label style="font-weight:400;margin:0;"><input type="checkbox" data-seat="${x.key}"${seats.has(x.key) ? ' checked' : ''}> ${gEsc(x.name)} <span class="muted">(S${x.stage})</span></label>`).join('');
+  document.getElementById('growthPolicies').innerHTML = growthCatalog.policies.map(x => `<label style="font-weight:400;margin:0;"><input type="checkbox" data-policy="${x.key}"${pols.has(x.key) ? ' checked' : ''}> ${gEsc(x.name)} <span class="muted">(S${x.stage})</span></label>`).join('');
+}
+
+document.getElementById('saveGrowthBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('growthStatus');
+  const inputs = {};
+  GROWTH_NUM.forEach(k => { const v = document.getElementById('g_' + k).value; inputs[k] = v === '' ? null : Number(v); });
+  GROWTH_YN.forEach(([k]) => { const v = document.getElementById('g_' + k).value; inputs[k] = v === '' ? null : v === 'yes'; });
+  inputs.filled_seats = [...document.querySelectorAll('#growthSeats input:checked')].map(x => x.dataset.seat);
+  inputs.policies = [...document.querySelectorAll('#growthPolicies input:checked')].map(x => x.dataset.policy);
+  st.textContent = 'Saving...';
+  try {
+    const d = await api('POST', '/orgs/' + selectedOrgId + '/growth', { inputs });
+    document.getElementById('growthResult').innerHTML = renderGrowth(d.growth);
+    st.textContent = 'Saved. Score ' + ((d.growth && d.growth.score) ?? '—') + ' / 20.';
+  } catch (e) { st.textContent = e.message; }
+});
 </script>
 <script src="org.js" defer></script>
 </body>

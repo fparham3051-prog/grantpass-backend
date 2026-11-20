@@ -117,6 +117,36 @@ def sso():
     st, orgs = call("GET", "/orgs", token=d["token"])
     assert st == 200 and any(o.get("name") == "Test Youth Alliance" for o in (orgs if isinstance(orgs, list) else orgs.get("organizations", orgs.get("orgs", [])))), (st, orgs)
 t("one sign-in: integration session works as the console user", sso)
+def growth_stage_and_score():
+    st, d = call("GET", f"/orgs/{S['org']}/growth", token=S["token"])
+    assert st == 200 and "inputs" in d, (st, d)
+    st, d = call("POST", f"/orgs/{S['org']}/growth", {"inputs": {"budget": 750000, "staff_fte": 6, "reserve_months": 2,
+        "personnel_share": 62, "largest_source_share": 45, "board_size": 6, "board_giving_pct": 80, "ed_evaluated": False,
+        "filled_seats": ["ed_full_time", "program_manager"], "policies": ["bylaws", "conflict_of_interest"]}}, S["token"])
+    assert st == 200, (st, d)
+    g = d["growth"]
+    assert g["stage"] == 2 and g["stageName"] == "Emerging", g
+    assert g["outOf"] == 20 and 0 <= g["score"] <= 20 and len(g["pillars"]) == 5, g
+    assert [h["seat"] for h in g["nextHires"]] == ["development_coordinator", "operations_coordinator"], g["nextHires"]
+    h = g["nextHires"][0]
+    assert h["loadedCost"] == 65000 and h["budgetRequired"] == 100000, h
+    assert any("100% board giving" in x for x in g["board"]["gaps"]) and any("Whistleblower" in x for x in g["board"]["gaps"]), g["board"]
+    assert g["baseline"]["score"] == g["score"] and len(g["history"]) == 1, g
+    S["growth_first"] = g["score"]
+t("growth: stage, readiness score, next hires and board gaps", growth_stage_and_score)
+def growth_progress():
+    st, d = call("POST", f"/orgs/{S['org']}/growth", {"inputs": {"reserve_months": 4, "board_giving_pct": 100, "ed_evaluated": True, "staff_fte": None}}, S["token"])
+    g = d["growth"]
+    assert st == 200 and g["score"] > S["growth_first"] and len(g["history"]) == 2, (st, g)
+    assert g["baseline"]["score"] == S["growth_first"], g["baseline"]
+    assert "staff_fte" not in d["inputs"] and d["inputs"]["budget"] == 750000, d["inputs"]
+    assert call("POST", f"/orgs/{S['org']}/growth", {"inputs": {"bogus": 1}}, S["token"])[0] == 400
+    assert call("GET", f"/orgs/{S['org']}/growth")[0] == 401
+    st, r = call("GET", f"/orgs/{S['org']}/full-report", token=S["token"])
+    assert st == 200 and r["growth"]["stage"] == 2, (st, r.get("growth"))
+    st, c = call("GET", "/growth/catalog")
+    assert st == 200 and len(c["stages"]) == 5 and any(x["key"] == "development_director" for x in c["seats"]), st
+t("growth: re-assessment shows progress against the baseline", growth_progress)
 def backup():
     st, d = call("GET", "/integration/backup", headers={"X-Integration-Key": "ik-test"})
     assert st == 200 and "organizations" in d["tables"] and len(d["tables"]["organizations"]) == 1, (st, list(d.get("tables", {}))[:5])

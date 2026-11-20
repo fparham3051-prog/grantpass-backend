@@ -484,6 +484,25 @@ function boardHtml(d) {
   </div></div>`;
 }
 
+function growthHtml(g) {
+  if (!g || !g.stage) return '';
+  const money = (n) => n == null ? 'check benchmarks' : '$' + Math.round(n).toLocaleString();
+  const pill = (p) => `<li><strong>${esc(p.name)}</strong>: ${p.score} of 4${p.measures ? ' <span class="muted">(' + esc(p.measures) + ')</span>' : ''}</li>`;
+  const moved = g.baseline && g.history && g.history.length > 1 ? ` That's ${g.score - g.baseline.score >= 0 ? 'up' : 'down'} ${Math.abs(g.score - g.baseline.score)} from your starting score of ${g.baseline.score}.` : '';
+  return `<section class="card">
+    <h2>Your Growth Pathway</h2>
+    <p class="lead">You're at <strong>stage ${g.stage}, ${esc(g.stageName)}</strong> (${esc(g.stageRange)}). Your Stage Readiness Score is <strong>${g.score} of ${g.outOf}</strong>: ${esc(g.band).toLowerCase()}.${moved}</p>
+    <ul class="steps">${g.pillars.map(pill).join('')}</ul>
+    <h3 style="margin:14px 0 6px">What to build next</h3>
+    <ul class="steps">${g.nextHires.map((h) => `<li><strong>${esc(h.name)}</strong>${h.salary == null ? '' : `: about ${money(h.loadedCost)} a year with benefits, which needs about ${money(h.budgetRequired)} of budget to carry`}</li>`).join('')}</ul>
+    <h3 style="margin:14px 0 6px">How to fund it</h3>
+    <p>${esc(g.fundraising.strategy)}. Goal: ${esc(g.fundraising.goal)}.</p>
+    <h3 style="margin:14px 0 6px">Your board at this stage</h3>
+    <p>${esc(g.board.type)} of ${esc(g.board.size)} members. ${esc(g.board.job)}.</p>
+    ${g.board.gaps.length ? '<ul class="steps">' + g.board.gaps.slice(0, 6).map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : ''}
+    <p class="muted" style="margin:10px 0 0">${esc(g.note)}</p>
+  </section>`;
+}
 function sealHtml(s) {
   if (!s) return '';
   const cur = SEAL_LEVELS.indexOf(s.currentName);
@@ -781,7 +800,7 @@ async function load() {
       const docs = d.portal && d.portal.documentsUrl ? `<section class="card"><h2>Your documents</h2><p>Plans, memos, and working files we share, in one folder.</p><a class="btn btn-ghost" href="${esc(d.portal.documentsUrl)}" target="_blank" rel="noopener">Open your folder</a></section>` : '';
       const panels = {
         home: nextActionHtml(d.portal) + contextHtml(d.portal) + sessionHtml(d.portal) + boardLinkHtml() + nextHtml(),
-        health: comparisonHtml((d.portal || {}).comparison) + dimsHtml(R) + selfVsHtml(d.portal, R) + historyHtml(d.history) + sealHtml(R.candidSeal) + boardLinkHtml(),
+        health: comparisonHtml((d.portal || {}).comparison) + dimsHtml(R) + growthHtml((d.portal || {}).growth) + selfVsHtml(d.portal, R) + historyHtml(d.history) + sealHtml(R.candidSeal) + boardLinkHtml(),
         priority: constraintHtml(R) + recordHtml(d.portal),
         plan: planHtml(d.portal) + updatesHtml(d.updates),
         evidence: evidenceHtml(d.evidence, R) + docs + closeoutHtml(d.portal) + outcomesHtml(d.outcomes) + complianceHtml(d.compliance) + donorHtml(d.donorSustainability),
