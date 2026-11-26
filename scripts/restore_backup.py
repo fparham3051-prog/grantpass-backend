@@ -9,14 +9,17 @@ organizations, so it can't overwrite live data by accident. With --replace
 it empties each table in the backup first. Run it against a fresh database,
 check it, then point the service at it.
 """
-import json, os, sys
+import gzip, json, os, sys
 import psycopg2, psycopg2.extras
 
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     path, replace = sys.argv[1], '--replace' in sys.argv
-    data = json.load(open(path))
+    # The nightly backups in Google Drive are gzip-compressed (*.json.gz).
+    with open(path, 'rb') as f:
+        raw = f.read()
+    data = json.loads(gzip.decompress(raw) if raw[:2] == b'\x1f\x8b' else raw)
     if 'institutionalos' in data:  # full-system bundle from the operations app
         data = data['institutionalos']
     tables = data['tables']
@@ -29,7 +32,12 @@ def main():
     if cur.fetchone()[0] and not replace:
         sys.exit('organizations already has rows; pass --replace to overwrite')
     cur.execute("SET session_replication_role = replica")  # skip FK order issues
+    cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+    have = {r[0] for r in cur.fetchall()}
     for t, rows in tables.items():
+        if t not in have:
+            print(f'skip {t} (not in this database)')
+            continue
         if replace:
             cur.execute(f'DELETE FROM "{t}"')
         if not rows:
@@ -38,7 +46,8 @@ def main():
         cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name=%s", (t,))
         types = dict(cur.fetchall())
         def val(c, v):
-            if v is not None and types.get(c) in ('json', 'jsonb') and not isinstance(v, str):
+            # JSON columns, and text columns that hold JSON (the backup gives them back parsed).
+            if isinstance(v, (dict, list)) or (v is not None and types.get(c) in ('json', 'jsonb') and not isinstance(v, str)):
                 return json.dumps(v)
             return v
         psycopg2.extras.execute_values(
