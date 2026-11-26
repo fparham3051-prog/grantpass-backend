@@ -154,6 +154,32 @@ def case_study():
     assert "[Quote from the 90-day results interview.]" in d["markdown"]
     assert call("GET", f"/orgs/{S['org']}/case-study")[0] == 401
 t("case study: a draft from scores, growth movement and the plan", case_study)
+def legacy_readiness():
+    st, d = call("GET", f"/orgs/{S['org']}/legacy", token=S["token"])
+    assert st == 200 and d["legacy"]["total"] == 6 and len(d["markers"]) == 6, (st, d)
+    st, d = call("POST", f"/orgs/{S['org']}/legacy", {"markers": {"deputy": True, "decisions": True, "succession": False, "concentration": True}}, S["token"])
+    lg = d["legacy"]
+    assert st == 200 and lg["met"] >= 3 and len(lg["history"]) == 1, (st, lg)
+    assert {x["key"]: x["met"] for x in lg["items"]}["succession"] is False
+    assert call("POST", f"/orgs/{S['org']}/legacy", {"markers": {"bogus": True}}, S["token"])[0] == 400
+    assert call("GET", f"/orgs/{S['org']}/legacy")[0] == 401
+    st, r = call("GET", f"/orgs/{S['org']}/full-report", token=S["token"])
+    assert st == 200 and r["legacy"]["met"] == lg["met"] and r["gapFirst"] and r["gapFirst"]["why"] in ("below-minimum", "weighted"), (st, r.get("gapFirst"))
+t("legacy: six markers, history, and the gap rule in the report", legacy_readiness)
+def validation_record():
+    import psycopg2 as pg
+    c = pg.connect(DB); c.autocommit = True
+    c.cursor().execute("UPDATE organizations SET self_scores=%s WHERE id=%s", (json.dumps({"strategy": 90, "governance": 80, "leadership": 85}), S["org"]))
+    c.close()
+    st, d = call("POST", f"/orgs/{S['org']}/milestones", {"kind": "expansion_opened", "note": "Second site", "happenedOn": "2026-11-20"}, S["token"])
+    assert st == 200 and d["milestones"][-1]["overall"] is not None, (st, d)
+    assert call("POST", f"/orgs/{S['org']}/milestones", {"kind": "nope"}, S["token"])[0] == 400
+    st, v = call("GET", "/validation", token=S["token"])
+    assert st == 200 and v["clientsWithBoth"] >= 1 and "strategy" in v["byDimension"], (st, v)
+    assert v["byDimension"]["strategy"]["avgSelfMinusVerified"] > 0, v["byDimension"]
+    assert v["outcomes"]["logged"] >= 1 and v["enoughData"] is False
+    assert call("GET", "/validation")[0] == 401
+t("validation: self vs verified across clients, and outcomes with the score at the time", validation_record)
 def backup():
     st, d = call("GET", "/integration/backup", headers={"X-Integration-Key": "ik-test"})
     assert st == 200 and "organizations" in d["tables"] and len(d["tables"]["organizations"]) == 1, (st, list(d.get("tables", {}))[:5])
