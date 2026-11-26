@@ -269,6 +269,33 @@ CREATE TABLE IF NOT EXISTS growth_history (
     computed_at TEXT NOT NULL
 );
 
+-- Legacy Readiness markers (legacy.py), one row per org, plus history.
+CREATE TABLE IF NOT EXISTS legacy_profiles (
+    org_id INTEGER PRIMARY KEY REFERENCES organizations(id),
+    inputs_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS legacy_history (
+    id SERIAL PRIMARY KEY,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    met INTEGER,
+    computed_at TEXT NOT NULL
+);
+
+-- Milestones beyond grant results (expansion, leadership transition) logged
+-- against a client with its overall score at the time, for the validation
+-- record. Grant results live in the outcomes table above.
+CREATE TABLE IF NOT EXISTS client_milestones (
+    id SERIAL PRIMARY KEY,
+    org_id INTEGER NOT NULL REFERENCES organizations(id),
+    kind TEXT NOT NULL,
+    note TEXT DEFAULT '',
+    happened_on TEXT DEFAULT '',
+    overall REAL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS funnel_events (
     id SERIAL PRIMARY KEY,
     event TEXT NOT NULL,

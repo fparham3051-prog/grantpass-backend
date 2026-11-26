@@ -26,6 +26,7 @@ import scoring
 import candid_seal
 import os_sync
 import growth
+import legacy
 
 db.init_db()
 
@@ -108,7 +109,19 @@ def org_summary(conn, org_id):
         "comparison": _comparison_for_fios(conn, org, r),
         "perception": {k: v for k, v in perception_summary(conn, org_id).items() if k in ("respondents", "byRole", "dimensions")},
         "growth": _growth_for_fios(conn, org_id),
+        "gapFirst": gap_first(r),
+        "legacy": _legacy_for_fios(conn, org_id),
     }
+
+
+def _legacy_for_fios(conn, org_id):
+    try:
+        lg = legacy_for(conn, org_id)
+    except Exception:  # noqa: BLE001 - the summary must still go out
+        return None
+    if not lg or not lg.get("known"):
+        return None
+    return {"met": lg["met"], "total": lg["total"], "missing": [x["name"] for x in lg["items"] if not x["met"]]}
 
 
 def growth_for(conn, org_id):
@@ -131,6 +144,73 @@ def growth_for(conn, org_id):
         result["baseline"] = {"stage": hist[0]["stage"], "score": hist[0]["score"], "at": hist[0]["computed_at"]}
     result["updatedAt"] = row["updated_at"] if row else None
     return result
+
+
+def legacy_for(conn, org_id):
+    """Legacy Readiness for an org (see legacy.py): saved markers, with
+    reserves and the Candid Seal filled from records when not entered."""
+    org = conn.execute("SELECT * FROM organizations WHERE id=?", (org_id,)).fetchone()
+    if not org:
+        return None
+    row = conn.execute("SELECT inputs_json, updated_at FROM legacy_profiles WHERE org_id=?", (org_id,)).fetchone()
+    snap = conn.execute("SELECT * FROM financial_snapshots WHERE org_id=? ORDER BY ingested_at DESC LIMIT 1", (org_id,)).fetchone()
+    result = legacy.assess(_json(row["inputs_json"], {}) if row else {}, dict(snap) if snap else None,
+                           org["candid_seal"] if "candid_seal" in org.keys() else "")
+    hist = conn.execute("SELECT met, computed_at FROM legacy_history WHERE org_id=? ORDER BY computed_at ASC, id ASC", (org_id,)).fetchall()
+    result["history"] = [dict(h) for h in hist]
+    result["updatedAt"] = row["updated_at"] if row else None
+    return result
+
+
+def gap_first(r):
+    """The gap that will break first under the one published rule, from a
+    score_org() result. Unscored (neutral default) areas are left out."""
+    if not r:
+        return None
+    stage = r.get("stage") or scoring.DEFAULT_STAGE
+    names = {d["key"]: d["name"] for d in scoring.DIMENSIONS}
+    scored = {d_key: sc for d_key, sc in (r.get("dimensionScores") or {}).items()
+              if not any(d["name"] == names.get(d_key) and "neutral default" in (d.get("note") or "").lower() for d in r.get("dimensions") or [])}
+    g = legacy.gap_rule(scored, stage, scoring.STAGE_WEIGHTS[stage], scoring.HARD_GATES[stage])
+    if g:
+        g["name"] = names.get(g["key"], g["key"])
+    return g
+
+
+def validation_record(conn, user_id):
+    """Self vs verified across every client of this account, plus outcomes."""
+    orgs = conn.execute("SELECT id, self_scores, stage FROM organizations WHERE user_id=?", (user_id,)).fetchall()
+    pairs, outcomes = [], []
+    for o in orgs:
+        self_s = _json(o["self_scores"] or "", {})
+        if self_s:
+            r = score_org(conn, o["id"]) or {}
+            manual = conn.execute("SELECT dimensions_json FROM manual_dimensions WHERE org_id=?", (o["id"],)).fetchone()
+            verified = {}
+            if manual:
+                verified.update(_json(manual["dimensions_json"], {}))
+            if r.get("financialSourced"):
+                verified["financial"] = (r.get("dimensionScores") or {}).get("financial")
+            if r.get("governanceSourced"):
+                verified["governance"] = (r.get("dimensionScores") or {}).get("governance")
+            mapped = {legacy.SELF_TO_DIM[k]: v for k, v in self_s.items() if k in legacy.SELF_TO_DIM}
+            verified = {k: v for k, v in verified.items() if isinstance(v, (int, float))}
+            if verified:
+                stage = r.get("stage") or scoring.DEFAULT_STAGE
+                w, gt = scoring.STAGE_WEIGHTS[stage], scoring.HARD_GATES[stage]
+                sg = legacy.gap_rule({k: v for k, v in mapped.items() if k in verified}, stage, w, gt)
+                vg = legacy.gap_rule(verified, stage, w, gt)
+                pairs.append({"self": mapped, "verified": verified, "selfGap": sg and sg["key"], "verifiedGap": vg and vg["key"]})
+        for oc in conn.execute("SELECT kind, overall FROM client_milestones WHERE org_id=?", (o["id"],)).fetchall():
+            outcomes.append(dict(oc))
+        # Grant results already logged against funders (the outcomes table).
+        for gr in conn.execute("SELECT result, score_at_time FROM outcomes WHERE org_id=?", (o["id"],)).fetchall():
+            res = str(gr["result"] or "").lower()
+            if res == "pending":
+                continue
+            kind = "grant_won" if res in ("awarded", "won", "funded", "approved") else "grant_declined" if res in ("declined", "rejected", "denied", "lost") else "other"
+            outcomes.append({"kind": kind, "overall": gr["score_at_time"]})
+    return legacy.validation_summary(pairs, outcomes)
 
 
 def case_study(conn, org):
@@ -701,6 +781,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._set_growth(int(m.group(1)))
             if m and method == "GET":
                 return self._get_growth(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/legacy$", path)
+            if m and method == "POST":
+                return self._set_legacy(int(m.group(1)))
+            if m and method == "GET":
+                return self._get_legacy(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/milestones$", path)
+            if m and method == "POST":
+                return self._add_milestone(int(m.group(1)))
+            if m and method == "GET":
+                return self._get_milestones(int(m.group(1)))
+            if path == "/validation" and method == "GET":
+                return self._get_validation()
             m = re.match(r"^/orgs/(\d+)/case-study$", path)
             if m and method == "GET":
                 return self._get_case_study(int(m.group(1)))
@@ -1745,6 +1837,98 @@ class Handler(BaseHTTPRequestHandler):
         sync_to_fios(org_id)
         return json_response(self, 200, {"inputs": inputs, "growth": result})
 
+    def _own_org(self, conn, org_id, user_id):
+        return conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+
+    def _set_legacy(self, org_id):
+        """Save Legacy Readiness markers. Body: {"markers": {key: true|false|null}}."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        new = data.get("markers") if isinstance(data.get("markers"), dict) else {}
+        unknown = sorted(k for k in new if k not in legacy.MARKER_KEYS)
+        if unknown:
+            return json_response(self, 400, {"error": "unknown markers: " + ", ".join(unknown)})
+        conn = db.get_conn()
+        if not self._own_org(conn, org_id, user_id):
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        row = conn.execute("SELECT inputs_json FROM legacy_profiles WHERE org_id=?", (org_id,)).fetchone()
+        inputs = _json(row["inputs_json"], {}) if row else {}
+        for k, v in new.items():
+            if v is None:
+                inputs.pop(k, None)
+            else:
+                inputs[k] = bool(v)
+        conn.execute(
+            "INSERT INTO legacy_profiles (org_id, inputs_json, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(org_id) DO UPDATE SET inputs_json=excluded.inputs_json, updated_at=excluded.updated_at",
+            (org_id, json.dumps(inputs), db.now()),
+        )
+        res = legacy_for(conn, org_id)
+        conn.execute("INSERT INTO legacy_history (org_id, met, computed_at) VALUES (?,?,?)", (org_id, res["met"], db.now()))
+        res = legacy_for(conn, org_id)
+        conn.commit()
+        conn.close()
+        sync_to_fios(org_id)
+        return json_response(self, 200, {"legacy": res})
+
+    def _get_legacy(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        if not self._own_org(conn, org_id, user_id):
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        res = legacy_for(conn, org_id)
+        conn.close()
+        return json_response(self, 200, {"legacy": res, "markers": legacy.MARKERS})
+
+    def _add_milestone(self, org_id):
+        """Log what happened: {"kind": one of legacy.OUTCOME_KINDS, "note", "happenedOn"}.
+        The client's overall score at the time is stored with it."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json()
+        kind = str(data.get("kind") or "")
+        if kind not in legacy.OUTCOME_KINDS:
+            return json_response(self, 400, {"error": "kind must be one of " + ", ".join(legacy.OUTCOME_KINDS)})
+        conn = db.get_conn()
+        if not self._own_org(conn, org_id, user_id):
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        r = score_org(conn, org_id) or {}
+        conn.execute("INSERT INTO client_milestones (org_id, kind, note, happened_on, overall, created_at) VALUES (?,?,?,?,?,?)",
+                     (org_id, kind, str(data.get("note") or "")[:500], str(data.get("happenedOn") or "")[:10], r.get("overall"), db.now()))
+        conn.commit()
+        rows = [dict(x) for x in conn.execute("SELECT id, kind, note, happened_on, overall, created_at FROM client_milestones WHERE org_id=? ORDER BY id", (org_id,)).fetchall()]
+        conn.close()
+        return json_response(self, 200, {"milestones": rows})
+
+    def _get_milestones(self, org_id):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        if not self._own_org(conn, org_id, user_id):
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        rows = [dict(x) for x in conn.execute("SELECT id, kind, note, happened_on, overall, created_at FROM client_milestones WHERE org_id=? ORDER BY id", (org_id,)).fetchall()]
+        conn.close()
+        return json_response(self, 200, {"milestones": rows, "kinds": legacy.OUTCOME_KINDS})
+
+    def _get_validation(self):
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        conn = db.get_conn()
+        out = validation_record(conn, user_id)
+        conn.close()
+        return json_response(self, 200, out)
+
     def _get_case_study(self, org_id):
         user_id = get_auth_user(self)
         if not user_id:
@@ -1903,12 +2087,16 @@ class Handler(BaseHTTPRequestHandler):
 
         conn_g = db.get_conn()
         growth_result = growth_for(conn_g, org_id)
+        legacy_result = legacy_for(conn_g, org_id)
+        gap_result = gap_first(score_org(conn_g, org_id))
         conn_g.close()
         return json_response(self, 200, {
             "org": {"id": org["id"], "name": org["name"]},
             "readiness": readiness,
             "donorSustainability": donor,
             "growth": growth_result,
+            "legacy": legacy_result,
+            "gapFirst": gap_result,
         })
 
     def _add_report(self, org_id):
