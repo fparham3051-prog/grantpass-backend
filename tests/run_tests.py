@@ -166,6 +166,14 @@ def legacy_readiness():
     st, r = call("GET", f"/orgs/{S['org']}/full-report", token=S["token"])
     assert st == 200 and r["legacy"]["met"] == lg["met"] and r["gapFirst"] and r["gapFirst"]["why"] in ("below-minimum", "weighted"), (st, r.get("gapFirst"))
 t("legacy: six markers, history, and the gap rule in the report", legacy_readiness)
+def scoring_model_published():
+    st, d = call("GET", "/scoring-model")
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))); import scoring
+    assert st == 200 and d == scoring.scoring_model(), (st, d)
+    assert set(d["stages"]) == {"BUILD", "FUND", "SUSTAIN"} and len(d["legacyMarkers"]) == 6
+    for stage in d["stages"].values():
+        assert sum(stage["weights"].values()) == 100, stage
+t("scoring model: published without sign-in, weights add to 100 on every path", scoring_model_published)
 def validation_record():
     import psycopg2 as pg
     c = pg.connect(DB); c.autocommit = True

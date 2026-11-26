@@ -296,6 +296,25 @@
           <div style="margin-top:12px;display:flex;gap:8px;align-items:center;"><button class="btn btn-primary btn-sm" id="saveGrowthBtn">Save and re-score</button><span class="status-msg" id="growthStatus" style="margin:0;"></span></div>
         </details>
 
+        <h3>Legacy Readiness</h3>
+        <p class="hint">The finish line on every path: six yes-or-no markers of an organization that can run, raise money and decide without its founder. Enter what you verified; reserves and the Candid Seal fill in from records when left blank. Saving re-scores and updates the client's workspace.</p>
+        <div id="legacyResult"><p class="muted">Loading...</p></div>
+        <details id="legacyForm" style="margin:8px 0 14px;"><summary style="cursor:pointer;font-weight:600;color:var(--navy);">Update Legacy markers</summary>
+          <div class="row" style="grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;" id="legacyFields"></div>
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center;"><button class="btn btn-primary btn-sm" id="saveLegacyBtn">Save and re-score</button><span class="status-msg" id="legacyStatus" style="margin:0;"></span></div>
+        </details>
+
+        <h3>Milestones</h3>
+        <p class="hint">What happened after the work: an expansion opened or paused, a leadership transition held or didn't. The overall score at the time is saved with each one, so the validation record can test whether the scores predicted the outcome. Log grant results under Funder outcomes.</p>
+        <div id="milestoneList"><p class="muted">Loading...</p></div>
+        <div class="row" style="grid-template-columns:1.2fr 0.8fr 2fr auto;gap:10px;align-items:end;margin:8px 0 6px;">
+          <div><label for="msKind">What happened</label><select id="msKind"></select></div>
+          <div><label for="msDate">When</label><input id="msDate" type="date"></div>
+          <div><label for="msNote">Note</label><input id="msNote" type="text" maxlength="500" placeholder="e.g. Second site opened on budget"></div>
+          <div><button class="btn btn-primary btn-sm" id="addMilestoneBtn">Log it</button></div>
+        </div>
+        <span class="status-msg" id="milestoneStatus" style="margin:0 0 14px;display:block;"></span>
+
         <h3>Full Report</h3>
         <p class="hint">Readiness score (financial + manual dimensions) alongside this org's most recent Donor Sustainability &amp; Stewardship Assessment, if they've taken it.</p>
         <div id="fullReportResult"><p class="muted">Loading...</p></div>
@@ -1280,6 +1299,8 @@ async function selectOrg(id) {
 
   loadFullReport(id, org ? org.name : '');
   loadGrowth(id);
+  loadLegacy(id);
+  loadMilestones(id);
   loadPlan(id);
   loadScoreHistory(id);
   loadDimensions(id);
@@ -1949,7 +1970,7 @@ document.getElementById('createFunderBtn').addEventListener('click', async () =>
   const TABS = [['home', 'Home'], ['health', 'Health'], ['priority', 'Priority'], ['plan', '90-Day Plan'], ['evidence', 'Evidence']];
   const BY_HEADING = {
     'Client Portal': 'home', 'Share With a Funder': 'home',
-    'Growth Pathway': 'health', 'Full Report': 'health', 'Score History': 'health', 'Financial Data': 'health', 'Dimension Scores': 'health',
+    'Growth Pathway': 'health', 'Legacy Readiness': 'health', 'Milestones': 'plan', 'Full Report': 'health', 'Score History': 'health', 'Financial Data': 'health', 'Dimension Scores': 'health',
     'Diagnostic Record': 'priority',
     '90-Day Improvement Plan': 'plan', 'Outcome Reports': 'plan',
     'Evidence Vault': 'evidence', 'Compliance Calendar': 'evidence',
@@ -2076,6 +2097,89 @@ document.getElementById('saveGrowthBtn').addEventListener('click', async () => {
     const d = await api('POST', '/orgs/' + selectedOrgId + '/growth', { inputs });
     document.getElementById('growthResult').innerHTML = renderGrowth(d.growth);
     st.textContent = 'Saved. Score ' + ((d.growth && d.growth.score) ?? '—') + ' / 20.';
+  } catch (e) { st.textContent = e.message; }
+});
+</script>
+<script>
+// ---------- Legacy Readiness and milestones (legacy.py) ----------
+let msKinds = null;
+// Milestones read best after the plan they follow: move the section to the end of the 90-Day Plan tab.
+(function () {
+  const pane = document.getElementById('dpane-plan'), st = document.getElementById('milestoneStatus');
+  const head = [...document.querySelectorAll('h3')].find(h => h.textContent.trim() === 'Milestones');
+  if (!pane || !st || !head) return;
+  const nodes = []; let n = head;
+  while (n) { nodes.push(n); if (n === st) break; n = n.nextSibling; }
+  nodes.forEach(x => pane.appendChild(x));
+})();
+function renderLegacy(lg) {
+  if (!lg) return '<p class="muted">No Legacy data yet.</p>';
+  const color = lg.met >= 5 ? '#1f7a4d' : lg.met >= 3 ? '#9a6b00' : '#b3261e';
+  let h = '<div class="evidence-item" style="padding:14px;">';
+  h += `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;"><div class="ev-name" style="font-size:15px;">${lg.ready ? 'Legacy ready' : 'On the way to legacy'}</div>`;
+  h += `<div style="text-align:right;"><div style="font-size:22px;font-weight:800;color:${color};">${lg.met} / ${lg.total}</div>`;
+  const hist = lg.history || [];
+  if (hist.length > 1) { const d = lg.met - hist[0].met; h += `<div class="muted" style="font-size:11.5px;">${d >= 0 ? '+' : ''}${d} since first scored (${gEsc(String(hist[0].computed_at).slice(0, 10))})</div>`; }
+  h += '</div></div><table style="width:100%;margin-top:10px;font-size:12.5px;border-collapse:collapse;">';
+  for (const x of lg.items) {
+    const mark = x.met === true ? '<strong style="color:#1f7a4d">Yes</strong>' : x.met === false ? '<strong style="color:#b3261e">No</strong>' : '<span class="muted">Not known</span>';
+    h += `<tr><td style="padding:3px 0;font-weight:700;width:230px;">${gEsc(x.name)}</td><td style="width:80px;">${mark}</td><td class="muted">${gEsc(x.source === 'entered' || x.source === 'missing' ? x.test : x.source + (x.note ? ': ' + x.note : ''))}</td></tr>`;
+  }
+  h += '</table>';
+  if (lg.missing && lg.missing.length) h += '<div class="muted" style="margin-top:8px;font-size:12px;"><strong>Not yet known:</strong> ' + lg.missing.map(gEsc).join('; ') + '</div>';
+  return h + '</div>';
+}
+async function loadLegacy(id) {
+  const out = document.getElementById('legacyResult');
+  out.innerHTML = '<p class="muted">Loading...</p>';
+  try {
+    const d = await api('GET', '/orgs/' + id + '/legacy');
+    if (selectedOrgId !== id) return;
+    out.innerHTML = renderLegacy(d.legacy);
+    const items = Object.fromEntries(((d.legacy && d.legacy.items) || []).map(x => [x.key, x]));
+    document.getElementById('legacyFields').innerHTML = d.markers.map(m => {
+      const it = items[m.key] || {}, v = it.source === 'entered' ? it.met : null;
+      return `<div><label for="lg_${m.key}">${gEsc(m.name)}</label><select id="lg_${m.key}" data-lg="${m.key}"><option value="">Not known${m.key === 'reserves' || m.key === 'candid' ? ' (use records)' : ''}</option><option value="yes"${v === true ? ' selected' : ''}>Yes</option><option value="no"${v === false ? ' selected' : ''}>No</option></select><div class="muted" style="font-size:11.5px;margin-top:2px;">${gEsc(m.test)}</div></div>`;
+    }).join('');
+  } catch (e) { out.innerHTML = '<p class="muted">' + gEsc(e.message) + '</p>'; }
+}
+document.getElementById('saveLegacyBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('legacyStatus');
+  const markers = {};
+  document.querySelectorAll('#legacyFields select[data-lg]').forEach(x => { markers[x.dataset.lg] = x.value === '' ? null : x.value === 'yes'; });
+  st.textContent = 'Saving...';
+  try {
+    const d = await api('POST', '/orgs/' + selectedOrgId + '/legacy', { markers });
+    document.getElementById('legacyResult').innerHTML = renderLegacy(d.legacy);
+    st.textContent = 'Saved. ' + d.legacy.met + ' of ' + d.legacy.total + ' markers met.';
+  } catch (e) { st.textContent = e.message; }
+});
+function renderMilestones(rows) {
+  if (!rows.length) return '<p class="muted">None logged yet.</p>';
+  return '<table style="width:100%;font-size:12.5px;border-collapse:collapse;">' + rows.slice().reverse().map(m =>
+    `<tr><td style="padding:3px 8px 3px 0;width:95px;">${gEsc(m.happened_on || String(m.created_at).slice(0, 10))}</td><td style="font-weight:700;width:230px;">${gEsc((msKinds && msKinds[m.kind]) || m.kind)}</td><td class="muted">${gEsc(m.note)}${m.overall != null ? ' &middot; overall ' + gEsc(m.overall) + ' at the time' : ''}</td></tr>`).join('') + '</table>';
+}
+async function loadMilestones(id) {
+  const out = document.getElementById('milestoneList');
+  try {
+    const d = await api('GET', '/orgs/' + id + '/milestones');
+    if (selectedOrgId !== id) return;
+    msKinds = d.kinds;
+    const sel = document.getElementById('msKind');
+    if (!sel.options.length) sel.innerHTML = Object.entries(d.kinds).map(([k, v]) => `<option value="${gEsc(k)}">${gEsc(v)}</option>`).join('');
+    out.innerHTML = renderMilestones(d.milestones);
+  } catch (e) { out.innerHTML = '<p class="muted">' + gEsc(e.message) + '</p>'; }
+}
+document.getElementById('addMilestoneBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('milestoneStatus');
+  st.textContent = 'Saving...';
+  try {
+    const d = await api('POST', '/orgs/' + selectedOrgId + '/milestones', { kind: document.getElementById('msKind').value, happenedOn: document.getElementById('msDate').value, note: document.getElementById('msNote').value });
+    document.getElementById('milestoneList').innerHTML = renderMilestones(d.milestones);
+    document.getElementById('msNote').value = '';
+    st.textContent = 'Logged.';
   } catch (e) { st.textContent = e.message; }
 });
 </script>
