@@ -667,6 +667,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/health":
                 return json_response(self, 200, {"ok": True})
+            if path == "/scoring-model" and method == "GET":
+                return json_response(self, 200, scoring.scoring_model())
             if path == "/auth/register" and method == "POST":
                 return self._register()
             if path == "/auth/login" and method == "POST":

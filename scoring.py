@@ -311,3 +311,17 @@ def score_governance_from_990(snapshot: dict | None):
     score = round((earned / possible) * 100)
     note = "; ".join(notes) + " (from filed Form 990 data)"
     return score, note
+
+
+def scoring_model():
+    """The published scoring model, in one shape shared with the website's
+    free check-up (/scoring-model.json there). The operations app's daily
+    systems check fetches both and flags any difference, so the free
+    check-up and the paid Diagnostic never drift apart."""
+    import legacy
+    return {
+        "version": 1,
+        "stages": {st: {"weights": dict(STAGE_WEIGHTS[st]), "minimums": dict(HARD_GATES[st])}
+                   for st in ("BUILD", "FUND", "SUSTAIN")},
+        "legacyMarkers": [m["key"] for m in legacy.MARKERS],
+    }
