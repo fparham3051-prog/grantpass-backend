@@ -396,6 +396,13 @@ def plan_bundle(conn, org):
     day90_done = any(r["kind"] == "day90" for r in reviews)
     month6_done = any(r["kind"] == "month6" for r in reviews)
     active = bool(start) and plan.get("status", "active") != "closed"
+    # Closing the engagement (see engagement_close): after the six-month
+    # reassessment, then a check-in a year after closing.
+    closed_on = closeout.get("closedOn") or ""
+    year_on = closeout.get("yearCheckinOn") or ""
+    year_done = bool(closed_on) and bool(conn.execute(
+        "SELECT 1 FROM client_milestones WHERE org_id=? AND kind='year_checkin' AND created_at >= ?", (org_id, closed_on)).fetchone())
+    close_due = bool(start) and not closed_on and month6_done
     # A weekly check-in is due once the plan is a week old and nothing has
     # been logged in the last 7 days (any review kind counts).
     since = last_review or start
@@ -404,7 +411,13 @@ def plan_bundle(conn, org):
     std_done = sum(1 for k in STANDARDIZE_KEYS if std.get(k) is True)
 
     # One next action, in priority order.
-    if not start:
+    if closed_on:
+        nxt = ({"kind": "year1", "text": "One-year check-in: rescore, update Legacy Readiness, and log what happened"}
+               if year_on and year_on <= today and not year_done else
+               {"kind": "closed", "text": "Closed " + _nice(closed_on) + (". One-year check-in on " + _nice(year_on) if year_on and not year_done else "")})
+    elif close_due and not blocked:
+        nxt = {"kind": "close", "text": "Close the engagement: final summary, permission to share the story, one-year check-in"}
+    elif not start:
         nxt = {"kind": "setup", "text": "Set the 90-day target and actions" if record.get("verifiedConstraint")
                else "Complete the Diagnostic: confirm the binding constraint"}
     elif blocked:
@@ -431,6 +444,8 @@ def plan_bundle(conn, org):
         "actionsTotal": len(actions), "actionsDone": len(done), "actionsBlocked": len(blocked), "actionsOverdue": len(overdue),
         "lastReviewOn": last_review, "weeklyReviewDue": weekly_due, "reassessDone": month6_done,
         "standardizeDone": std_done, "standardizeTotal": len(STANDARDIZE_KEYS), "nextAction": nxt,
+        "closeDue": close_due, "closedOn": closed_on, "yearCheckinOn": year_on, "yearCheckinDone": year_done,
+        "yearCheckinDue": bool(closed_on and year_on and year_on <= today and not year_done),
     }
     return {"plan": plan, "actions": actions, "reviews": reviews, "status": status}
 
@@ -788,6 +803,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._set_legacy(int(m.group(1)))
             if m and method == "GET":
                 return self._get_legacy(int(m.group(1)))
+            m = re.match(r"^/orgs/(\d+)/close$", path)
+            if m and method == "GET":
+                return self._close_engagement(int(m.group(1)), save=False)
+            if m and method == "POST":
+                return self._close_engagement(int(m.group(1)), save=True)
             m = re.match(r"^/orgs/(\d+)/milestones$", path)
             if m and method == "POST":
                 return self._add_milestone(int(m.group(1)))
@@ -1908,7 +1928,67 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         rows = [dict(x) for x in conn.execute("SELECT id, kind, note, happened_on, overall, created_at FROM client_milestones WHERE org_id=? ORDER BY id", (org_id,)).fetchall()]
         conn.close()
+        sync_to_fios(org_id)  # a one-year check-in clears the follow-up in the morning brief
         return json_response(self, 200, {"milestones": rows})
+
+    STORY_CHOICES = ("yes", "no", "later")
+
+    def _close_engagement(self, org_id, save):
+        """The last assessment. GET previews the closing summary; POST
+        {storyPermission: yes|no|later, note} closes the engagement: it stores
+        the summary (overall score and Legacy Readiness at the start and now,
+        the gap at the Diagnostic and today), marks the plan closed, logs an
+        "Engagement closed" milestone, and sets a check-in one year out that
+        shows up in the operations app's morning brief."""
+        user_id = get_auth_user(self)
+        if not user_id:
+            return json_response(self, 401, {"error": "auth required"})
+        data = self._read_json() if save else {}
+        story = str(data.get("storyPermission") or "")
+        if save and story not in self.STORY_CHOICES:
+            return json_response(self, 400, {"error": "storyPermission must be yes, no or later"})
+        conn = db.get_conn()
+        org = conn.execute("SELECT * FROM organizations WHERE id=? AND user_id=?", (org_id, user_id)).fetchone()
+        if not org:
+            conn.close()
+            return json_response(self, 404, {"error": "org not found"})
+        record = _json(org["diagnostic_record"], {}) or {}
+        plan = _json(org["improvement_plan"], {}) or {}
+        co = record.get("closeout") or {}
+        r = score_org(conn, org_id) or {}
+        cmp = score_comparison(conn, org_id, r, plan.get("startDate") or "")
+        lg = legacy_for(conn, org_id) or {}
+        hist = lg.get("history") or []
+        g = gap_first(r)
+        summary = {
+            "overallBefore": cmp["overallBefore"] if cmp else None,
+            "overallAfter": round(float(r.get("overall") or 0), 1) if r else None,
+            "overallChange": cmp["overallChange"] if cmp else None,
+            "baselineDate": cmp["baselineDate"] if cmp else "",
+            "legacyBefore": hist[0]["met"] if hist else None,
+            "legacyAfter": lg.get("met"),
+            "legacyTotal": lg.get("total", 6),
+            "gapAtStart": record.get("verifiedConstraint") or "",
+            "gapNow": g["name"] if g else "",
+            "decision": record.get("decisionAtStake") or "",
+        }
+        if not save:
+            conn.close()
+            return json_response(self, 200, {"summary": summary, "closedOn": co.get("closedOn") or "",
+                                             "yearCheckinOn": co.get("yearCheckinOn") or "", "storyPermission": co.get("storyPermission") or ""})
+        today = _today()
+        co.update({"closedOn": today, "yearCheckinOn": _add_days(today, 365), "storyPermission": story,
+                   "closingNote": str(data.get("note") or "")[:1000], "closingSummary": summary})
+        record["closeout"] = co
+        plan["status"] = "closed"
+        conn.execute("UPDATE organizations SET diagnostic_record=?, improvement_plan=? WHERE id=?",
+                     (json.dumps(record), json.dumps(plan), org_id))
+        conn.execute("INSERT INTO client_milestones (org_id, kind, note, happened_on, overall, created_at) VALUES (?,?,?,?,?,?)",
+                     (org_id, "engagement_closed", ("Story: " + story + ". " + str(data.get("note") or ""))[:500], today, r.get("overall"), db.now()))
+        conn.commit()
+        conn.close()
+        sync_to_fios(org_id)
+        return json_response(self, 200, {"summary": summary, "closedOn": today, "yearCheckinOn": co["yearCheckinOn"], "storyPermission": story})
 
     def _get_milestones(self, org_id):
         user_id = get_auth_user(self)

@@ -188,6 +188,29 @@ def validation_record():
     assert v["outcomes"]["logged"] >= 1 and v["enoughData"] is False
     assert call("GET", "/validation")[0] == 401
 t("validation: self vs verified across clients, and outcomes with the score at the time", validation_record)
+def close_engagement():
+    import psycopg2 as pg
+    st, prev = call("GET", f"/orgs/{S['org']}/close", token=S["token"])
+    assert st == 200 and prev["closedOn"] == "" and prev["summary"]["legacyAfter"] is not None, (st, prev)
+    assert call("POST", f"/orgs/{S['org']}/close", {"storyPermission": "maybe"}, S["token"])[0] == 400
+    st, d = call("POST", f"/orgs/{S['org']}/close", {"storyPermission": "later", "note": "Board wants to see the 6-month numbers first"}, S["token"])
+    assert st == 200 and d["closedOn"] and d["yearCheckinOn"] > d["closedOn"] and d["storyPermission"] == "later", (st, d)
+    st, m = call("GET", f"/orgs/{S['org']}/milestones", token=S["token"])
+    assert m["milestones"][-1]["kind"] == "engagement_closed" and "later" in m["milestones"][-1]["note"]
+    st, pb = call("GET", f"/orgs/{S['org']}/plan", token=S["token"])
+    stt = pb.get("status") or {}
+    assert stt.get("closedOn") == d["closedOn"] and stt.get("active") is False and stt["nextAction"]["kind"] in ("closed", "year1"), stt
+    # A year later the check-in is due; logging it clears it.
+    c = pg.connect(DB); c.autocommit = True; cur = c.cursor()
+    cur.execute("SELECT diagnostic_record FROM organizations WHERE id=%s", (S["org"],)); rec = json.loads(cur.fetchone()[0])
+    rec["closeout"]["yearCheckinOn"] = "2000-01-01"
+    cur.execute("UPDATE organizations SET diagnostic_record=%s WHERE id=%s", (json.dumps(rec), S["org"])); c.close()
+    stt = call("GET", f"/orgs/{S['org']}/plan", token=S["token"])[1]["status"]
+    assert stt["yearCheckinDue"] is True and stt["nextAction"]["kind"] == "year1", stt
+    assert call("POST", f"/orgs/{S['org']}/milestones", {"kind": "year_checkin", "note": "Rescored"}, S["token"])[0] == 200
+    stt = call("GET", f"/orgs/{S['org']}/plan", token=S["token"])[1]["status"]
+    assert stt["yearCheckinDue"] is False and stt["yearCheckinDone"] is True, stt
+t("closing: final summary, story permission, and a one-year check-in that clears when logged", close_engagement)
 def backup():
     st, d = call("GET", "/integration/backup", headers={"X-Integration-Key": "ik-test"})
     assert st == 200 and "organizations" in d["tables"] and len(d["tables"]["organizations"]) == 1, (st, list(d.get("tables", {}))[:5])
