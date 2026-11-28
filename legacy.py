@@ -51,6 +51,9 @@ OUTCOME_KINDS = {
     "transition_smooth": "Leadership transition held",
     "transition_rough": "Leadership transition disrupted",
     "other": "Other",
+    # Logged by the system: closing an engagement, and the check-in a year later.
+    "engagement_closed": "Engagement closed",
+    "year_checkin": "One-year check-in",
 }
 
 # Check-up areas (self_scores keys) to InstitutionalOS dimension keys.

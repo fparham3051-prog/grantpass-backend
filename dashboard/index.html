@@ -315,6 +315,16 @@
         </div>
         <span class="status-msg" id="milestoneStatus" style="margin:0 0 14px;display:block;"></span>
 
+        <h3>Close the engagement</h3>
+        <p class="hint">The last assessment, after the six-month reassessment. Rescore first, then close: this saves where they started and where they are now, records whether you may share their story, and sets a check-in one year out that shows up in your morning brief.</p>
+        <div id="closeSummary"><p class="muted">Loading...</p></div>
+        <div id="closeForm" class="row" style="grid-template-columns:1fr 2fr auto;gap:10px;align-items:end;margin:8px 0 6px;">
+          <div><label for="closeStory">May we share their story?</label><select id="closeStory"><option value="">Choose...</option><option value="yes">Yes</option><option value="later">Ask again later</option><option value="no">No</option></select></div>
+          <div><label for="closeNote">Note</label><input id="closeNote" type="text" maxlength="1000" placeholder="e.g. Board wants to see the six-month numbers first"></div>
+          <div><button class="btn btn-primary btn-sm" id="closeBtn">Close the engagement</button></div>
+        </div>
+        <span class="status-msg" id="closeStatus" style="margin:0 0 14px;display:block;"></span>
+
         <h3>Full Report</h3>
         <p class="hint">Readiness score (financial + manual dimensions) alongside this org's most recent Donor Sustainability &amp; Stewardship Assessment, if they've taken it.</p>
         <div id="fullReportResult"><p class="muted">Loading...</p></div>
@@ -1301,6 +1311,7 @@ async function selectOrg(id) {
   loadGrowth(id);
   loadLegacy(id);
   loadMilestones(id);
+  loadClose(id);
   loadPlan(id);
   loadScoreHistory(id);
   loadDimensions(id);
@@ -2105,7 +2116,7 @@ document.getElementById('saveGrowthBtn').addEventListener('click', async () => {
 let msKinds = null;
 // Milestones read best after the plan they follow: move the section to the end of the 90-Day Plan tab.
 (function () {
-  const pane = document.getElementById('dpane-plan'), st = document.getElementById('milestoneStatus');
+  const pane = document.getElementById('dpane-plan'), st = document.getElementById('closeStatus');
   const head = [...document.querySelectorAll('h3')].find(h => h.textContent.trim() === 'Milestones');
   if (!pane || !st || !head) return;
   const nodes = []; let n = head;
@@ -2171,6 +2182,44 @@ async function loadMilestones(id) {
     out.innerHTML = renderMilestones(d.milestones);
   } catch (e) { out.innerHTML = '<p class="muted">' + gEsc(e.message) + '</p>'; }
 }
+// ---------- Close the engagement (the last assessment) ----------
+function renderClose(d) {
+  const s = d.summary || {};
+  const num = (v) => v == null ? '&ndash;' : gEsc(v);
+  const delta = s.overallChange == null ? '' : ` (${s.overallChange >= 0 ? '+' : ''}${gEsc(s.overallChange)})`;
+  let h = '<div class="evidence-item" style="padding:14px;"><table style="width:100%;font-size:12.5px;border-collapse:collapse;">';
+  h += `<tr><td style="padding:3px 0;font-weight:700;width:230px;">Overall score</td><td>${num(s.overallBefore)} &rarr; ${num(s.overallAfter)}${delta}${s.baselineDate ? ' <span class="muted">since ' + gEsc(s.baselineDate) + '</span>' : ''}</td></tr>`;
+  h += `<tr><td style="padding:3px 0;font-weight:700;">Legacy Readiness</td><td>${num(s.legacyBefore)} &rarr; ${num(s.legacyAfter)} of ${gEsc(s.legacyTotal || 6)}</td></tr>`;
+  if (s.gapAtStart || s.gapNow) h += `<tr><td style="padding:3px 0;font-weight:700;">Gap that breaks first</td><td>${s.gapAtStart ? 'At the Diagnostic: ' + gEsc(s.gapAtStart) : ''}${s.gapAtStart && s.gapNow ? '<br>' : ''}${s.gapNow ? 'Today: ' + gEsc(s.gapNow) : ''}</td></tr>`;
+  if (s.decision) h += `<tr><td style="padding:3px 0;font-weight:700;">The decision they came with</td><td>${gEsc(s.decision)}</td></tr>`;
+  h += '</table>';
+  if (d.closedOn) h += `<p style="margin:10px 0 0;"><strong>Closed ${gEsc(d.closedOn)}.</strong> Story: ${gEsc({ yes: 'yes, may share', later: 'ask again later', no: 'not to be shared' }[d.storyPermission] || 'not asked')}. One-year check-in on ${gEsc(d.yearCheckinOn)}; log it under Milestones as "One-year check-in".</p>`;
+  return h + '</div>';
+}
+async function loadClose(id) {
+  const out = document.getElementById('closeSummary');
+  try {
+    const d = await api('GET', '/orgs/' + id + '/close');
+    if (selectedOrgId !== id) return;
+    out.innerHTML = renderClose(d);
+    document.getElementById('closeForm').style.display = d.closedOn ? 'none' : '';
+  } catch (e) { out.innerHTML = '<p class="muted">' + gEsc(e.message) + '</p>'; }
+}
+document.getElementById('closeBtn').addEventListener('click', async () => {
+  if (!selectedOrgId) return;
+  const st = document.getElementById('closeStatus');
+  const story = document.getElementById('closeStory').value;
+  if (!story) { st.textContent = 'Choose whether you may share their story first.'; return; }
+  if (!confirm('Close this engagement? The plan stops asking for check-ins, and a one-year check-in is set.')) return;
+  st.textContent = 'Closing...';
+  try {
+    const d = await api('POST', '/orgs/' + selectedOrgId + '/close', { storyPermission: story, note: document.getElementById('closeNote').value });
+    document.getElementById('closeSummary').innerHTML = renderClose(d);
+    document.getElementById('closeForm').style.display = 'none';
+    st.textContent = 'Closed. Their story permission and the one-year check-in are saved.';
+    loadMilestones(selectedOrgId);
+  } catch (e) { st.textContent = e.message; }
+});
 document.getElementById('addMilestoneBtn').addEventListener('click', async () => {
   if (!selectedOrgId) return;
   const st = document.getElementById('milestoneStatus');
